@@ -13,6 +13,7 @@ use MediaWiki\Hook\ContributionsToolLinksHook;
 use MediaWiki\Hook\GetLogTypesOnUserHook;
 use MediaWiki\Hook\OtherBlockLogLinkHook;
 use MediaWiki\Hook\SpecialContributionsBeforeMainOutputHook;
+use MediaWiki\MediaWikiServices;
 use MediaWiki\Permissions\Hook\GetUserPermissionsErrorsExpensiveHook;
 use MediaWiki\Permissions\PermissionManager;
 use MediaWiki\User\Hook\SpecialPasswordResetOnSubmitHook;
@@ -112,6 +113,9 @@ class GlobalBlockingHooks implements
 			'gb_by_central_id',
 			"$base/sql/$type/patch-add-gb_by_central_id.sql"
 		);
+		$updater->addExtensionUpdate(
+			[ [ __CLASS__, 'updateGlobalExtensionTable' ] ]
+		);
 		$updater->addPostDatabaseUpdateMaintenance( PopulateCentralId::class );
 		$updater->modifyExtensionField(
 			'globalblocks',
@@ -134,6 +138,37 @@ class GlobalBlockingHooks implements
 		}
 
 		return true;
+	}
+
+	/**
+	 * @param DatabaseUpdater $updater
+	 */
+	public static function updateGlobalExtensionTable( DatabaseUpdater $updater ) {
+		$services = MediaWikiServices::getInstance();
+		$mainConfig = $services->getMainConfig();
+		if ( !$mainConfig->has( 'GlobalBlockingDatabase' ) ) {
+			return;
+		}
+		$domain = $mainConfig->get( 'GlobalBlockingDatabase' );
+		$lbFactory = $services->getDBLoadBalancerFactory();
+		$dbw = $lbFactory
+			->getMainLB( $domain )
+			->getMaintenanceConnectionRef(
+				DB_PRIMARY,
+				[],
+				$domain
+			);
+		if (
+			!$dbw->tableExists( 'globalblocks', __METHOD__ )
+			|| $dbw->fieldExists( 'globalblocks', 'gb_by_central_id', __METHOD__ )
+		) {
+			return;
+		}
+		$type = $dbw->getType();
+		$dbw->sourceFile(
+			__DIR__ . "/../sql/$type/patch-add-gb_by_central_id.sql"
+		);
+		$lbFactory->waitForReplication( [ 'domain' => $domain ] );
 	}
 
 	/**
