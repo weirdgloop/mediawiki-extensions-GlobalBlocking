@@ -2,6 +2,7 @@
 
 namespace MediaWiki\Extension\GlobalBlocking\Special;
 
+use CentralIdLookup;
 use DerivativeContext;
 use Html;
 use HTMLForm;
@@ -21,12 +22,21 @@ class SpecialGlobalBlockList extends SpecialPage {
 	/** @var BlockUtils */
 	private $blockUtils;
 
+	/** @var CentralIdLookup */
+	private $lookup;
+
+	/**
+	 * @param BlockUtils $blockUtils
+	 * @param CentralIdLookup $lookup
+	 */
 	public function __construct(
-		BlockUtils $blockUtils
+		BlockUtils $blockUtils,
+		CentralIdLookup $lookup
 	) {
 		parent::__construct( 'GlobalBlockList' );
 
 		$this->blockUtils = $blockUtils;
+		$this->lookup = $lookup;
 	}
 
 	/**
@@ -151,7 +161,12 @@ class SpecialGlobalBlockList extends SpecialPage {
 			$conds[] = "gb_expiry != " . $dbr->addQuotes( $dbr->getInfinity() );
 		}
 
-		$pager = new GlobalBlockListPager( $this->getContext(), $conds, $this->getLinkRenderer() );
+		$pager = new GlobalBlockListPager(
+			$this->getContext(),
+			$conds,
+			$this->getLinkRenderer(),
+			$this->lookup
+		);
 		$body = $pager->getBody();
 		if ( $body != '' ) {
 			$out->addHTML(

@@ -2,6 +2,7 @@
 
 namespace MediaWiki\Extension\GlobalBlocking;
 
+use CentralIdLookup;
 use Config;
 use DatabaseUpdater;
 use Html;
@@ -45,13 +46,22 @@ class GlobalBlockingHooks implements
 	/** @var Config */
 	private $config;
 
+	/** @var CentralIdLookup */
+	private $lookup;
+
 	/**
 	 * @param PermissionManager $permissionManager
 	 * @param Config $mainConfig
+	 * @param CentralIdLookup $lookup
 	 */
-	public function __construct( PermissionManager $permissionManager, Config $mainConfig ) {
+	public function __construct(
+		PermissionManager $permissionManager,
+		Config $mainConfig,
+		CentralIdLookup $lookup
+	) {
 		$this->permissionManager = $permissionManager;
 		$this->config = $mainConfig;
+		$this->lookup = $lookup;
 	}
 
 	/**
@@ -285,7 +295,12 @@ class GlobalBlockingHooks implements
 
 		if ( $block !== null ) {
 			$conds = GlobalBlocking::getRangeCondition( $block->gb_address );
-			$pager = new GlobalBlockListPager( $sp->getContext(), $conds, $sp->getLinkRenderer() );
+			$pager = new GlobalBlockListPager(
+				$sp->getContext(),
+				$conds,
+				$sp->getLinkRenderer(),
+				$this->lookup
+			);
 			$body = $pager->formatRow( $block );
 
 			$out = $sp->getOutput();
