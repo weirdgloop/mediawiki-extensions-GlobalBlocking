@@ -118,6 +118,7 @@ class GlobalBlocking {
 		$hookRunner = new GlobalBlockingHookRunner( $services->getHookContainer() );
 
 		$lang = $context->getLanguage();
+		$lookup = $services->getCentralIdLookup();
 		$block = self::getGlobalBlockingBlock( $ip, !$user->isNamed() );
 		if ( $block ) {
 			// Check for local whitelisting
@@ -130,7 +131,10 @@ class GlobalBlocking {
 			$blockTimestamp = $lang->timeanddate( wfTimestamp( TS_MW, $block->gb_timestamp ), true );
 			$blockExpiry = $lang->formatExpiry( $block->gb_expiry );
 			$display_wiki = WikiMap::getWikiName( $block->gb_by_wiki );
-			$blockingUser = self::maybeLinkUserpage( $block->gb_by_wiki, $block->gb_by );
+			$blockingUser = self::maybeLinkUserpage(
+				$block->gb_by_wiki,
+				$lookup->nameFromCentralId( $block->gb_by_central_id ) ?? ''
+			);
 
 			// Allow site customization of blocked message.
 			if ( IPUtils::isValid( $block->gb_address ) ) {
@@ -145,7 +149,6 @@ class GlobalBlocking {
 				);
 			}
 
-			$services = MediaWikiServices::getInstance();
 			$language = $services->getContentLanguage()->getCode();
 
 			$result = [
@@ -185,7 +188,10 @@ class GlobalBlocking {
 						);
 						$blockExpiry = $lang->formatExpiry( $block->gb_expiry );
 						$display_wiki = WikiMap::getWikiName( $block->gb_by_wiki );
-						$blockingUser = self::maybeLinkUserpage( $block->gb_by_wiki, $block->gb_by );
+						$blockingUser = self::maybeLinkUserpage(
+							$block->gb_by_wiki,
+							$lookup->nameFromCentralId( $block->gb_by_central_id ) ?? ''
+						);
 						// Allow site customization of blocked message.
 						$blockedIpXffMsg = 'globalblocking-ipblocked-xff';
 						$hookRunner->onGlobalBlockingBlockedIpXffMsg( $blockedIpXffMsg );
@@ -764,7 +770,9 @@ class GlobalBlocking {
 	}
 
 	public static function selectFields() {
-		return [ 'gb_id', 'gb_address', 'gb_by', 'gb_by_wiki', 'gb_reason', 'gb_timestamp',
-			'gb_anon_only', 'gb_expiry', 'gb_range_start', 'gb_range_end' ];
+		return [
+			'gb_id', 'gb_address', 'gb_by', 'gb_by_central_id', 'gb_by_wiki', 'gb_reason',
+			'gb_timestamp', 'gb_anon_only', 'gb_expiry', 'gb_range_start', 'gb_range_end'
+		];
 	}
 }
