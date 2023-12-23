@@ -44,8 +44,7 @@
 		"GlobalBlockList": {
 			"class": "MediaWiki\\Extension\\GlobalBlocking\\Special\\SpecialGlobalBlockList",
 			"services": [
-				"BlockUtils",
-				"CentralIdLookup"
+				"BlockUtils"
 			]
 		},
 		"GlobalBlockStatus": {
@@ -109,12 +108,7 @@
 		}
 	},
 	"APIListModules": {
-		"globalblocks": {
-			"class": "MediaWiki\\Extension\\GlobalBlocking\\Api\\ApiQueryGlobalBlocks",
-			"services": [
-				"CentralIdLookup"
-			]
-		}
+		"globalblocks": "MediaWiki\\Extension\\GlobalBlocking\\Api\\ApiQueryGlobalBlocks"
 	},
 	"MessagesDirs": {
 		"GlobalBlocking": [
@@ -145,8 +139,7 @@
 			"class": "MediaWiki\\Extension\\GlobalBlocking\\GlobalBlockingHooks",
 			"services": [
 				"PermissionManager",
-				"MainConfig",
-				"CentralIdLookup"
+				"MainConfig"
 			]
 		}
 	},

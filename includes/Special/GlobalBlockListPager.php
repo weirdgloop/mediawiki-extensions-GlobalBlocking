@@ -2,7 +2,6 @@
 
 namespace MediaWiki\Extension\GlobalBlocking\Special;
 
-use CentralIdLookup;
 use Html;
 use HtmlArmor;
 use IContextSource;
@@ -18,26 +17,10 @@ class GlobalBlockListPager extends ReverseChronologicalPager {
 	/** @var array */
 	private $queryConds;
 
-	/** @var CentralIdLookup */
-	private $lookup;
-
-	/**
-	 * @param IContextSource $context
-	 * @param array $conds
-	 * @param LinkRenderer $linkRenderer
-	 * @param CentralIdLookup $lookup
-	 */
-	public function __construct(
-		IContextSource $context,
-		array $conds,
-		LinkRenderer $linkRenderer,
-		CentralIdLookup $lookup
-	) {
-		// Set database before parent constructor to avoid setting it there with wfGetDB
-		$this->mDb = GlobalBlocking::getGlobalBlockingDatabase( DB_REPLICA );
+	public function __construct( IContextSource $context, array $conds, LinkRenderer $linkRenderer ) {
 		parent::__construct( $context, $linkRenderer );
 		$this->queryConds = $conds;
-		$this->lookup = $lookup;
+		$this->mDb = GlobalBlocking::getGlobalBlockingDatabase( DB_REPLICA );
 	}
 
 	public function formatRow( $row ) {
@@ -104,10 +87,7 @@ class GlobalBlockListPager extends ReverseChronologicalPager {
 		$timestamp = $lang->userTimeAndDate( wfTimestamp( TS_MW, $timestamp ), $user );
 		// Userpage link / Info on originating wiki
 		$displayWiki = WikiMap::getWikiName( $row->gb_by_wiki );
-		$userDisplay = GlobalBlocking::maybeLinkUserpage(
-			$row->gb_by_wiki,
-			$this->lookup->nameFromCentralId( $row->gb_by_central_id ) ?? ''
-		);
+		$userDisplay = GlobalBlocking::maybeLinkUserpage( $row->gb_by_wiki, $row->gb_by );
 		$infoItems = count( $info )
 			? $this->msg( 'parentheses' )->rawParams( $lang->pipeList( $info ) )->escaped()
 			: '';

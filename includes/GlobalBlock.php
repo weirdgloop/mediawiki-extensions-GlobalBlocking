@@ -4,7 +4,6 @@ namespace MediaWiki\Extension\GlobalBlocking;
 
 use IContextSource;
 use MediaWiki\Block\DatabaseBlock;
-use CentralIdLookup;
 use MediaWiki\MediaWikiServices;
 use stdClass;
 use User;
@@ -53,30 +52,25 @@ class GlobalBlock extends DatabaseBlock {
 	 * @param stdClass $block DB row from globalblocks table
 	 */
 	public function setGlobalBlocker( stdClass $block ) {
-		$lookup = MediaWikiServices::getInstance()
-			->getCentralIdLookupFactory()
-			->getLookup();
-
-		$user = $lookup->localUserFromCentralId( $block->gb_by_central_id, CentralIdLookup::AUDIENCE_RAW );
-
+		$user = User::newFromName( $block->gb_by );
 		// If the block was inserted from this wiki, then we know the blocker exists
-		if ( $user && $block->gb_by_wiki === WikiMap::getCurrentWikiId() ) {
+		if ( $block->gb_by_wiki === WikiMap::getCurrentWikiId() ) {
 			$this->setBlocker( $user );
 			return;
 		}
-
 		// If the blocker is the same user on the foreign wiki and the current wiki
 		// then we can use the username
-		if ( $user && $user->getId() && $lookup->isAttached( $user )
+		$lookup = MediaWikiServices::getInstance()
+			->getCentralIdLookupFactory()
+			->getLookup();
+		if ( $user->getId() && $lookup->isAttached( $user )
 			&& $lookup->isAttached( $user, $block->gb_by_wiki )
 		) {
 			$this->setBlocker( $user );
 			return;
 		}
 
-		$username = $lookup->nameFromCentralId( $block->gb_by_central_id, CentralIdLookup::AUDIENCE_RAW );
-
 		// They don't exist locally, so we need to use an interwiki username
-		$this->setBlocker( User::newFromName( "{$block->gb_by_wiki}>{$username}", false ) );
+		$this->setBlocker( User::newFromName( "{$block->gb_by_wiki}>{$block->gb_by}", false ) );
 	}
 }

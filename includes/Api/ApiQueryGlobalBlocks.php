@@ -26,10 +26,8 @@
 namespace MediaWiki\Extension\GlobalBlocking\Api;
 
 use ApiBase;
-use ApiQuery;
 use ApiQueryBase;
 use ApiResult;
-use CentralIdLookup;
 use MediaWiki\Extension\GlobalBlocking\GlobalBlocking;
 use Wikimedia\IPUtils;
 use Wikimedia\ParamValidator\ParamValidator;
@@ -49,23 +47,8 @@ class ApiQueryGlobalBlocks extends ApiQueryBase {
 	 */
 	private $globalBlockingDb;
 
-	/**
-	 * @var CentralIdLookup
-	 */
-	private $lookup;
-
-	/**
-	 * @param ApiQuery $query
-	 * @param string $moduleName
-	 * @param CentralIdLookup $lookup
-	 */
-	public function __construct(
-		ApiQuery $query,
-		$moduleName,
-		CentralIdLookup $lookup
-	) {
+	public function __construct( $query, $moduleName ) {
 		parent::__construct( $query, $moduleName, 'bg' );
-		$this->lookup = $lookup;
 	}
 
 	public function execute() {
@@ -92,7 +75,7 @@ class ApiQueryGlobalBlocks extends ApiQueryBase {
 			$this->addFields( [ 'gb_address', 'gb_anon_only' ] );
 		}
 		if ( $fld_by ) {
-			$this->addFields( [ 'gb_by_central_id', 'gb_by_wiki' ] );
+			$this->addFields( [ 'gb_by', 'gb_by_wiki' ] );
 		}
 
 		$this->addFields( 'gb_timestamp' );
@@ -183,7 +166,7 @@ class ApiQueryGlobalBlocks extends ApiQueryBase {
 				}
 			}
 			if ( $fld_by ) {
-				$block['by'] = $this->lookup->nameFromCentralId( $row->gb_by_central_id );
+				$block['by'] = $row->gb_by;
 				$block['bywiki'] = $row->gb_by_wiki;
 			}
 			if ( $fld_timestamp ) {
