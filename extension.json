@@ -7,7 +7,7 @@
 	"type": "other",
 	"callback": "MediaWiki\\Extension\\GlobalBlocking\\GlobalBlockingHooks::onRegistration",
 	"requires": {
-		"MediaWiki": ">= 1.39.0"
+		"MediaWiki": ">= 1.41"
 	},
 	"GroupPermissions": {
 		"steward": {
@@ -44,7 +44,8 @@
 		"GlobalBlockList": {
 			"class": "MediaWiki\\Extension\\GlobalBlocking\\Special\\SpecialGlobalBlockList",
 			"services": [
-				"BlockUtils"
+				"BlockUtils",
+				"CommentFormatter"
 			]
 		},
 		"GlobalBlockStatus": {
@@ -124,13 +125,14 @@
 		"MediaWiki\\Extension\\GlobalBlocking\\Maintenance\\": "maintenance/"
 	},
 	"Hooks": {
-		"getUserPermissionsErrorsExpensive": "main",
+		"GetUserBlock": "main",
 		"UserIsBlockedGlobally": "main",
 		"SpecialPasswordResetOnSubmit": "main",
 		"OtherBlockLogLink": "main",
 		"SpecialContributionsBeforeMainOutput": "main",
 		"UserMergeAccountFields": "MediaWiki\\Extension\\GlobalBlocking\\GlobalBlockingHooks::onUserMergeAccountFields",
-		"LoadExtensionSchemaUpdates": "MediaWiki\\Extension\\GlobalBlocking\\GlobalBlockingHooks::onLoadExtensionSchemaUpdates",
+		"LoadExtensionSchemaUpdates": "schema",
+		"GetBlockErrorMessageKey": "main",
 		"GetLogTypesOnUser": "main",
 		"ContributionsToolLinks": "main"
 	},
@@ -139,8 +141,12 @@
 			"class": "MediaWiki\\Extension\\GlobalBlocking\\GlobalBlockingHooks",
 			"services": [
 				"PermissionManager",
-				"MainConfig"
+				"MainConfig",
+				"CommentFormatter"
 			]
+		},
+		"schema": {
+			"class": "MediaWiki\\Extension\\GlobalBlocking\\GlobalBlockingSchemaHooks"
 		}
 	},
 	"config": {

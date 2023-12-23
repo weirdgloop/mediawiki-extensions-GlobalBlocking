@@ -3,25 +3,26 @@
 namespace MediaWiki\Extension\GlobalBlocking;
 
 use Config;
-use DatabaseUpdater;
 use Html;
 use LogicException;
-use MediaWiki\Block\DatabaseBlock;
-use MediaWiki\Extension\GlobalBlocking\Maintenance\PopulateCentralId;
+use MediaWiki\Block\AbstractBlock;
+use MediaWiki\Block\Block;
+use MediaWiki\Block\CompositeBlock;
+use MediaWiki\Block\Hook\GetUserBlockHook;
+use MediaWiki\CommentFormatter\CommentFormatter;
 use MediaWiki\Extension\GlobalBlocking\Special\GlobalBlockListPager;
 use MediaWiki\Hook\ContributionsToolLinksHook;
+use MediaWiki\Hook\GetBlockErrorMessageKeyHook;
 use MediaWiki\Hook\GetLogTypesOnUserHook;
 use MediaWiki\Hook\OtherBlockLogLinkHook;
 use MediaWiki\Hook\SpecialContributionsBeforeMainOutputHook;
-use MediaWiki\MediaWikiServices;
-use MediaWiki\Permissions\Hook\GetUserPermissionsErrorsExpensiveHook;
 use MediaWiki\Permissions\PermissionManager;
+use MediaWiki\Title\Title;
 use MediaWiki\User\Hook\SpecialPasswordResetOnSubmitHook;
 use MediaWiki\User\Hook\UserIsBlockedGloballyHook;
-use MWException;
+use Message;
 use RequestContext;
 use SpecialPage;
-use Title;
 use User;
 use Wikimedia\IPUtils;
 
@@ -31,9 +32,10 @@ use Wikimedia\IPUtils;
  * @license GPL-2.0-or-later
  */
 class GlobalBlockingHooks implements
-	GetUserPermissionsErrorsExpensiveHook,
+	GetUserBlockHook,
 	UserIsBlockedGloballyHook,
 	SpecialPasswordResetOnSubmitHook,
+	GetBlockErrorMessageKeyHook,
 	OtherBlockLogLinkHook,
 	SpecialContributionsBeforeMainOutputHook,
 	GetLogTypesOnUserHook,
@@ -45,159 +47,76 @@ class GlobalBlockingHooks implements
 	/** @var Config */
 	private $config;
 
+	/** @var CommentFormatter */
+	private $commentFormatter;
+
 	/**
 	 * @param PermissionManager $permissionManager
 	 * @param Config $mainConfig
+	 * @param CommentFormatter $commentFormatter
 	 */
-	public function __construct( PermissionManager $permissionManager, Config $mainConfig ) {
+	public function __construct(
+		PermissionManager $permissionManager,
+		Config $mainConfig,
+		CommentFormatter $commentFormatter
+	) {
 		$this->permissionManager = $permissionManager;
 		$this->config = $mainConfig;
+		$this->commentFormatter = $commentFormatter;
 	}
 
 	/**
 	 * Extension registration callback
 	 */
 	public static function onRegistration() {
-		global $wgWikimediaJenkinsCI, $wgGlobalBlockingDatabase, $wgDBname;
+		global $wgGlobalBlockingDatabase, $wgDBname;
 
 		// Override $wgGlobalBlockingDatabase for Wikimedia Jenkins.
-		if ( isset( $wgWikimediaJenkinsCI ) && $wgWikimediaJenkinsCI ) {
+		if ( defined( 'MW_QUIBBLE_CI' ) ) {
 			$wgGlobalBlockingDatabase = $wgDBname;
 		}
 	}
 
 	/**
-	 * This is static since LoadExtensionSchemaUpdates does not allow service dependencies
-	 * @param DatabaseUpdater $updater
-	 * @return bool
-	 */
-	public static function onLoadExtensionSchemaUpdates( DatabaseUpdater $updater ) {
-		$base = __DIR__ . '/..';
-		$type = $updater->getDB()->getType();
-
-		$updater->addExtensionTable(
-			'globalblocks',
-			"$base/sql/$type/tables-generated-globalblocks.sql"
-		);
-
-		$updater->addExtensionTable(
-			'global_block_whitelist',
-			"$base/sql/$type/tables-generated-global_block_whitelist.sql"
-		);
-
-		switch ( $type ) {
-			case 'sqlite':
-			case 'mysql':
-				// 1.34
-				$updater->modifyExtensionField(
-					'globalblocks',
-					'gb_reason',
-					"$base/sql/patch-globalblocks-reason-length.sql"
-				);
-				$updater->modifyExtensionField(
-					'global_block_whitelist',
-					'gbw_reason',
-					"$base/sql/patch-global_block_whitelist-reason-length.sql"
-				);
-				$updater->modifyExtensionField(
-					'global_block_whitelist',
-					'gbw_by_text',
-					"$base/sql/patch-global_block_whitelist-use-varbinary.sql"
-				);
-				break;
-		}
-
-		// 1.38
-		$updater->addExtensionField(
-			'globalblocks',
-			'gb_by_central_id',
-			"$base/sql/$type/patch-add-gb_by_central_id.sql"
-		);
-		$updater->addExtensionUpdate(
-			[ [ __CLASS__, 'updateGlobalExtensionTable' ] ]
-		);
-		$updater->addPostDatabaseUpdateMaintenance( PopulateCentralId::class );
-		$updater->modifyExtensionField(
-			'globalblocks',
-			'gb_anon_only',
-			"$base/sql/$type/patch-globalblocks-gb_anon_only.sql"
-		);
-
-		// 1.39
-		$updater->modifyExtensionField(
-			'globalblocks',
-			'gb_expiry',
-			"$base/sql/$type/patch-globalblocks-timestamps.sql"
-		);
-		if ( $type === 'postgres' ) {
-			$updater->modifyExtensionField(
-				'global_block_whitelist',
-				'gbw_expiry',
-				"$base/sql/$type/patch-global_block_whitelist-timestamps.sql"
-			);
-		}
-
-		return true;
-	}
-
-	/**
-	 * @param DatabaseUpdater $updater
-	 */
-	public static function updateGlobalExtensionTable( DatabaseUpdater $updater ) {
-		$services = MediaWikiServices::getInstance();
-		$mainConfig = $services->getMainConfig();
-		if ( !$mainConfig->has( 'GlobalBlockingDatabase' ) ) {
-			return;
-		}
-		$domain = $mainConfig->get( 'GlobalBlockingDatabase' );
-		$lbFactory = $services->getDBLoadBalancerFactory();
-		$dbw = $lbFactory
-			->getMainLB( $domain )
-			->getMaintenanceConnectionRef(
-				DB_PRIMARY,
-				[],
-				$domain
-			);
-		if (
-			!$dbw->tableExists( 'globalblocks', __METHOD__ )
-			|| $dbw->fieldExists( 'globalblocks', 'gb_by_central_id', __METHOD__ )
-		) {
-			return;
-		}
-		$type = $dbw->getType();
-		$dbw->sourceFile(
-			__DIR__ . "/../sql/$type/patch-add-gb_by_central_id.sql"
-		);
-		$lbFactory->waitForReplication( [ 'domain' => $domain ] );
-	}
-
-	/**
-	 * @param Title $title
-	 * @param User $user
-	 * @param string $action
-	 * @param mixed &$result
+	 * Add a global block. If there are any existing blocks, add
+	 * the global block into a CompositeBlock.
 	 *
+	 * @param User $user
+	 * @param string|null $ip null unless we're checking the session user
+	 * @param AbstractBlock|null &$block
 	 * @return bool
 	 */
-	public function onGetUserPermissionsErrorsExpensive(
-		$title, $user, $action, &$result
-	) {
-		global $wgRequest;
-		if ( $action === 'read' || !$this->config->get( 'ApplyGlobalBlocks' ) ) {
+	public function onGetUserBlock( $user, $ip, &$block ) {
+		if ( !$this->config->get( 'ApplyGlobalBlocks' ) ) {
+			return true;
+		}
+
+		if ( $ip === null && !IPUtils::isIPAddress( $user->getName() ) ) {
 			return true;
 		}
 
 		if ( $this->permissionManager->userHasAnyRight( $user, 'ipblock-exempt', 'globalblock-exempt' ) ) {
-			// User is exempt from IP blocks.
 			return true;
 		}
 
-		$ip = $wgRequest->getIP();
-		$blockError = GlobalBlocking::getUserBlockErrors( $user, $ip );
-		if ( !empty( $blockError ) ) {
-			$result = [ $blockError ];
-			return false;
+		$globalBlock = GlobalBlocking::getUserBlock( $user, $ip );
+		if ( !$globalBlock ) {
+			return true;
 		}
+
+		if ( !$block ) {
+			$block = $globalBlock;
+			return true;
+		}
+
+		// User is locally blocked and globally blocked. We need a CompositeBlock.
+		$allBlocks = $block->toArray();
+		$allBlocks[] = $globalBlock;
+		$block = new CompositeBlock( [
+			'address' => $ip ?? $user->getName(),
+			'reason' => new Message( 'blockedtext-composite-reason' ),
+			'originalBlocks' => $allBlocks,
+		] );
 		return true;
 	}
 
@@ -205,7 +124,7 @@ class GlobalBlockingHooks implements
 	 * @param User $user
 	 * @param string $ip
 	 * @param bool &$blocked
-	 * @param DatabaseBlock|null &$block
+	 * @param AbstractBlock|null &$block
 	 *
 	 * @return bool
 	 */
@@ -233,6 +152,26 @@ class GlobalBlockingHooks implements
 			$requestContext->getRequest()->getIP()
 		) ) {
 			$error = 'globalblocking-blocked-nopassreset';
+			return false;
+		}
+		return true;
+	}
+
+	/**
+	 * @param Block $block
+	 * @param string &$key
+	 *
+	 * @return bool
+	 */
+	public function onGetBlockErrorMessageKey( Block $block, string &$key ) {
+		if ( $block instanceof GlobalBlock ) {
+			if ( $block->getXff() ) {
+				$key = 'globalblocking-blockedtext-xff';
+			} elseif ( IPUtils::isValid( $block->getTargetName() ) ) {
+				$key = 'globalblocking-blockedtext-ip';
+			} elseif ( IPUtils::isValidRange( $block->getTargetName() ) ) {
+				$key = 'globalblocking-blockedtext-range';
+			}
 			return false;
 		}
 		return true;
@@ -285,7 +224,12 @@ class GlobalBlockingHooks implements
 
 		if ( $block !== null ) {
 			$conds = GlobalBlocking::getRangeCondition( $block->gb_address );
-			$pager = new GlobalBlockListPager( $sp->getContext(), $conds, $sp->getLinkRenderer() );
+			$pager = new GlobalBlockListPager(
+				$sp->getContext(),
+				$conds,
+				$sp->getLinkRenderer(),
+				$this->commentFormatter
+			);
 			$body = $pager->formatRow( $block );
 
 			$out = $sp->getOutput();
@@ -308,7 +252,6 @@ class GlobalBlockingHooks implements
 	 * @param array &$tools Tool links
 	 * @param SpecialPage $sp Special page
 	 * @return bool|void
-	 * @throws MWException
 	 */
 	public function onContributionsToolLinks(
 		$id, $title, &$tools, $sp

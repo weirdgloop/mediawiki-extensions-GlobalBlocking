@@ -1,10 +1,10 @@
 {
 	"@metadata": {
 		"authors": [
+			"Amire80",
 			"Boukman",
 			"Jvm",
-			"Macofe",
-			"Amire80"
+			"Macofe"
 		]
 	},
 	"globalblocking-desc": "[[Special:GlobalBlock|Pemèt]] adrès IP yo [[Special:GlobalBlockList|bloke atravè plizyè wiki]]",
@@ -48,5 +48,6 @@
 	"globalblocklist": "Lis Adrès IP bloke globalman yo",
 	"globalblock": "Bloke yon adrès IP globalman",
 	"right-globalblock": "Fè blokaj global",
-	"right-globalblock-whitelist": "Dezame blokaj global yo lokalman"
+	"right-globalblock-whitelist": "Dezame blokaj global yo lokalman",
+	"globalblocking-blockedtext-proxy": "Adrès proxy ki bloke a te $1."
 }

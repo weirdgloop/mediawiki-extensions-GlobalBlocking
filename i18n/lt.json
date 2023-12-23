@@ -5,9 +5,9 @@
 			"Garas",
 			"Homo",
 			"Matasg",
+			"Nokeoo",
 			"Tomasdd",
-			"Vogone",
-			"Nokeoo"
+			"Vogone"
 		]
 	},
 	"globalblocking-desc": "[[Special:GlobalBlock|Leidžia]] IP adresus [[Special:GlobalBlockList|blokuoti keliose viki]]",
@@ -79,8 +79,12 @@
 	"globalblocking-whitelist-dewhitelisted": "Vėl įjungėte visuotinį bloką #$2 IP adresui '''$1''' {{SITENAME}}.",
 	"globalblocking-whitelist-nochange": "Nepakeitėte šio blokavimo vietinės būsenos.",
 	"globalblocking-whitelist-intro": "Galite naudoti šią formą norėdami redaguoti vietinę visuotinio blokavimo būseną.\nJei visuotinis blokavimas išjungtas šiame viki paveikto IP adreso naudotojai galės redaguoti įprastai.",
-	"globalblocking-ipblocked": "'''Jūsų IP adresas buvo užblokuotas visuose projektuose.'''\n\nUžblokavo $1 ($2).\nNurodyta priežastis: ''$3''.\n\n* Blokavimo pradžia: $4\n* Blokavimo pabaiga: $5\n\nJūs galite susisiekti su $1, kad aptartumėte neaiškumus dėl blokavimo.\nJūs galėsite pasinaudoti funkcija \"{{int:emailuser}}\", tik jei esate nurodę galiojantį el. pašto adresą [[Special:Preferences|paskyros nustatymuose]] ir jums nėra apribota galimybė pasinaudoti šia funkcija.\nJūsų IP adresas yra $6.\nPrašome nurodyti visas šias detales, kai kreipiatės dėl blokavimo.",
-	"globalblocking-ipblocked-range": "'''Jūsų IP adresas priklauso adresų sričiai, kuri buvo užblokuota visuose projektuose.'''\n\nUžblokavo $1 ($2).\nNurodyta priežastis: ''$3''.\n\n* Blokavimo pradžia: $4\n* Blokavimo pabaiga: $5\n\nJūs galite susisiekti su $1, kad aptartumėte neaiškumus dėl blokavimo.\nJūs galėsite pasinaudoti funkcija \"{{int:emailuser}}\", tik jei esate nurodę galiojantį el. pašto adresą [[Special:Preferences|paskyros nustatymuose]] ir jums nėra apribota galimybė pasinaudoti šia funkcija.\nJūsų IP adresas yra $6, o užblokuota adresų sritis yra $7.\nPrašome nurodyti visas šias detales, kai kreipiatės dėl blokavimo.",
+	"globalblocking-blockedtext-ip": "'''{{int:globalblocking-blockedtext-all-wikis}}'''\n\n{{int:blockedtext-made-by|$1}}\n{{int:blockedtext-reason-comment|$2}}.\n\n* {{int:blockedtext-start-time|$8}}\n* {{int:blockedtext-expiration-time|$6}}\n\n{{int:globalblocking-blockedtext-blocker-admin|$1}}\n{{int:globalblocking-blockedtext-email-feature}}\n{{int:blockedtext-block-ip|$3}}\n{{int:blockedtext-include-details-queries}}",
+	"globalblocking-blockedtext-range": "'''{{int:globalblocking-blockedtext-on-range}}'''\n\n{{int:blockedtext-made-by|$1}}\n{{int:blockedtext-reason-comment|$2}}.\n\n* {{int:blockedtext-start-time|$8}}\n* {{int:blockedtext-expiration-time|$6}}\n\n{{int:globalblocking-blockedtext-blocker-admin|$1}}\n{{int:globalblocking-blockedtext-email-feature}}\n{{int:blockedtext-block-ip|$3}} {{int:globalblocking-blockedtext-ip-range|$7}}\n{{int:blockedtext-include-details-queries}}",
+	"globalblocking-blockedtext-xff": "'''{{int:globalblocking-blockedtext-on-proxy}}'''\n\n{{int:blockedtext-made-by|$1}}\n{{int:blockedtext-reason-comment|$2}}.\n\n* {{int:blockedtext-start-time|$8}}\n* {{int:blockedtext-expiration-time|$6}}\n\n{{int:globalblocking-blockedtext-blocker-admin|$1}}\n{{int:globalblocking-blockedtext-email-feature}}\n{{int:globalblocking-blockedtext-proxy|$7}}\n{{int:blockedtext-include-details-queries}}",
+	"globalblocking-ipblocked": "'''{{int:globalblocking-blockedtext-all-wikis}}'''\n\nUžblokavo $1 ($2).\n{{int:blockedtext-reason-comment|$3}}.\n\n* {{int:blockedtext-start-time|$4}}\n* {{int:blockedtext-expiration-time|$5}}\n\n{{int:globalblocking-blockedtext-blocker-admin|$1}}\n{{int:globalblocking-blockedtext-email-feature}}\n{{int:blockedtext-block-ip|$6}}\n{{int:blockedtext-include-details-queries}}",
+	"globalblocking-ipblocked-range": "'''{{int:globalblocking-blockedtext-on-range}}'''\n\nUžblokavo $1 ($2).\n{{int:blockedtext-reason-comment|$3}}.\n\n* {{int:blockedtext-start-time|$4}}\n* {{int:blockedtext-expiration-time|$5}}\n\n{{int:globalblocking-blockedtext-blocker-admin|$1}}\n{{int:globalblocking-blockedtext-email-feature}}\n{{int:blockedtext-block-ip|$6}} {{int:globalblocking-blockedtext-ip-range|$7}}\n{{int:blockedtext-include-details-queries}}",
+	"globalblocking-ipblocked-xff": "'''{{int:globalblocking-blockedtext-on-proxy}}'''\n\nUžblokavo $1 ($2).\n{{int:blockedtext-reason-comment|$3}}.\n\n* {{int:blockedtext-start-time|$4}}\n* {{int:blockedtext-expiration-time|$5}}\n\n{{int:globalblocking-blockedtext-blocker-admin|$1}}\n{{int:globalblocking-blockedtext-email-feature}}\n{{int:globalblocking-blockedtext-proxy|$7}} {{int:blockedtext-include-details-queries}}",
 	"globalblocking-blocked-nopassreset": "Negalite iš naujo nustatyti naudotojų slaptažodžių, nes jūsų IP adresas visuotinai užblokuotas.",
 	"globalblocking-logpage": "Visuotinio blokavimo sąrašas",
 	"globalblocking-logpagetext": "Tai yra visuotinių blokavimųų, kurie buvo sukurti ir pašalinti šioje viki, žurnalas.\nReikėtų pažymėti, kad visuotinius blokavimus galima sukurti ir pašalinti kituose viki ir kad šie visuotiniai blokavimai gali turėti įtakos šiam viki.\nSiekiant peržiūrėti visus aktyvius visuotinius blokavimus, žiūrėkite [[Special:GlobalBlockList|visuotinį blokavimų sąrašą]].",
@@ -115,5 +119,10 @@
 	"log-action-filter-gblblock-modify": "Visuotinio blokavimo keitimas",
 	"log-action-filter-gblblock-whitelist": "Įtraukimas į visuotinio blokavimų baltąjį sąrašą",
 	"log-action-filter-gblblock-dwhitelist": "Išbraukimas iš visuotinio blokavimų baltojo sąrašo",
-	"grant-globalblock": "Visuotinai blokuoti ar atblokuoti IP adresą"
+	"grant-globalblock": "Visuotinai blokuoti ar atblokuoti IP adresą",
+	"globalblocking-blockedtext-all-wikis": "Jūsų IP adresas buvo užblokuotas visuose viki.",
+	"globalblocking-blockedtext-on-range": "Jūsų IP adresas yra diapazone, kuris buvo užblokuotas visuose viki.",
+	"globalblocking-blockedtext-blocker-admin": "Norėdami aptarti blokavimą, galite susisiekti su $1.",
+	"globalblocking-blockedtext-email-feature": "Negalite naudoti funkcijos „{{int:emailuser}}“, nebent [[Special:Preferences|paskyros nuostatose]] yra nurodytas galiojantis el. pašto adresas ir jums nebuvo užblokuotas jo naudojimas.",
+	"globalblocking-blockedtext-ip-range": "Užblokuotas diapazonas yra $1."
 }

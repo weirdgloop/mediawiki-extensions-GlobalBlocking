@@ -2,23 +2,25 @@
 
 namespace MediaWiki\Extension\GlobalBlocking;
 
-use IContextSource;
-use MediaWiki\Block\DatabaseBlock;
+use MediaWiki\Block\AbstractBlock;
 use MediaWiki\MediaWikiServices;
+use MediaWiki\User\UserIdentity;
+use MediaWiki\WikiMap\WikiMap;
 use stdClass;
 use User;
-use WikiMap;
 
-// FIXME breaks most methods of DatabaseBlock, some if them in dangerous ways.
-//   Should subclass AbstractBlock instead.
-class GlobalBlock extends DatabaseBlock {
+class GlobalBlock extends AbstractBlock {
 	/** @var int */
 	private $id;
 
-	/**
-	 * @var array
-	 */
+	/** @var array */
 	protected $error;
+
+	/** @var bool */
+	protected $xff;
+
+	/** @var UserIdentity|null */
+	private $blocker;
 
 	/**
 	 * @param stdClass $block
@@ -28,9 +30,45 @@ class GlobalBlock extends DatabaseBlock {
 	public function __construct( stdClass $block, array $error, $options ) {
 		parent::__construct( $options );
 
+		$db = MediaWikiServices::getInstance()
+			->getDBLoadBalancerFactory()
+			->getMainLB( $this->getWikiId() )
+			->getConnection( DB_REPLICA, [], $this->getWikiId() );
+		$this->setExpiry( $db->decodeExpiry( $options['expiry'] ) );
+
 		$this->id = $block->gb_id;
 		$this->error = $error;
+		$this->xff = (bool)$options['xff'];
 		$this->setGlobalBlocker( $block );
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function getBy( $wikiId = self::LOCAL ): int {
+		$this->assertWiki( $wikiId );
+		return ( $this->blocker ) ? $this->blocker->getId( $wikiId ) : 0;
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function getByName(): string {
+		return ( $this->blocker ) ? $this->blocker->getName() : '';
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function getBlocker(): ?UserIdentity {
+		return $this->blocker;
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function getIdentifier( $wikiId = self::LOCAL ) {
+		return $this->getId( $wikiId );
 	}
 
 	/** @inheritDoc */
@@ -38,24 +76,18 @@ class GlobalBlock extends DatabaseBlock {
 		return $this->id;
 	}
 
-	/**
-	 * @inheritDoc
-	 */
-	public function getPermissionsError( IContextSource $context ) {
-		return $this->error;
+	public function getXff() {
+		return $this->xff;
 	}
 
 	/**
-	 * DatabaseBlock requires that the blocker exist or be an interwiki username,
-	 * so do some validation to figure out what we need to use (T182344)
-	 *
 	 * @param stdClass $block DB row from globalblocks table
 	 */
 	public function setGlobalBlocker( stdClass $block ) {
 		$user = User::newFromName( $block->gb_by );
 		// If the block was inserted from this wiki, then we know the blocker exists
 		if ( $block->gb_by_wiki === WikiMap::getCurrentWikiId() ) {
-			$this->setBlocker( $user );
+			$this->blocker = $user;
 			return;
 		}
 		// If the blocker is the same user on the foreign wiki and the current wiki
@@ -66,11 +98,39 @@ class GlobalBlock extends DatabaseBlock {
 		if ( $user->getId() && $lookup->isAttached( $user )
 			&& $lookup->isAttached( $user, $block->gb_by_wiki )
 		) {
-			$this->setBlocker( $user );
+			$this->blocker = $user;
 			return;
 		}
 
 		// They don't exist locally, so we need to use an interwiki username
-		$this->setBlocker( User::newFromName( "{$block->gb_by_wiki}>{$block->gb_by}", false ) );
+		$this->blocker = User::newFromName( "{$block->gb_by_wiki}>{$block->gb_by}", false );
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function appliesToRight( $right ) {
+		$res = parent::appliesToRight( $right );
+		switch ( $right ) {
+			case 'upload':
+				return true;
+			case 'createaccount':
+				return true;
+		}
+		return $res;
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function appliesToPasswordReset() {
+		return true;
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function isCreateAccountBlocked( $x = null ): bool {
+		return true;
 	}
 }

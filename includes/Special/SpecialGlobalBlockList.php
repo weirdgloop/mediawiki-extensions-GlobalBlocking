@@ -5,8 +5,9 @@ namespace MediaWiki\Extension\GlobalBlocking\Special;
 use DerivativeContext;
 use Html;
 use HTMLForm;
+use MediaWiki\Block\AbstractBlock;
 use MediaWiki\Block\BlockUtils;
-use MediaWiki\Block\DatabaseBlock;
+use MediaWiki\CommentFormatter\CommentFormatter;
 use MediaWiki\Extension\GlobalBlocking\GlobalBlocking;
 use SpecialPage;
 use Wikimedia\IPUtils;
@@ -21,12 +22,17 @@ class SpecialGlobalBlockList extends SpecialPage {
 	/** @var BlockUtils */
 	private $blockUtils;
 
+	/** @var CommentFormatter */
+	private $commentFormatter;
+
 	public function __construct(
-		BlockUtils $blockUtils
+		BlockUtils $blockUtils,
+		CommentFormatter $commentFormatter
 	) {
 		parent::__construct( 'GlobalBlockList' );
 
 		$this->blockUtils = $blockUtils;
+		$this->commentFormatter = $commentFormatter;
 	}
 
 	/**
@@ -119,10 +125,10 @@ class SpecialGlobalBlockList extends SpecialPage {
 			[ $target, $type ] = $this->blockUtils->parseBlockTarget( $this->target );
 
 			switch ( $type ) {
-				case DatabaseBlock::TYPE_IP:
+				case AbstractBlock::TYPE_IP:
 					$conds = GlobalBlocking::getRangeCondition( $target );
 					break;
-				case DatabaseBlock::TYPE_RANGE:
+				case AbstractBlock::TYPE_RANGE:
 					$conds = [ 'gb_address' => $target ];
 					break;
 			}
@@ -151,7 +157,12 @@ class SpecialGlobalBlockList extends SpecialPage {
 			$conds[] = "gb_expiry != " . $dbr->addQuotes( $dbr->getInfinity() );
 		}
 
-		$pager = new GlobalBlockListPager( $this->getContext(), $conds, $this->getLinkRenderer() );
+		$pager = new GlobalBlockListPager(
+			$this->getContext(),
+			$conds,
+			$this->getLinkRenderer(),
+			$this->commentFormatter
+		);
 		$body = $pager->getBody();
 		if ( $body != '' ) {
 			$out->addHTML(

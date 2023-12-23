@@ -4,6 +4,7 @@
 			"Abanima",
 			"Aiman titi",
 			"Alnokta",
+			"Alshamiri1",
 			"Asaifm",
 			"AwamerT",
 			"Loya",
@@ -13,7 +14,7 @@
 			"Mido",
 			"OsamaK",
 			"ديفيد",
-			"Alshamiri1"
+			"LaMagiaaa"
 		]
 	},
 	"globalblocking-desc": "[[Special:GlobalBlock|يسمح]] بمنع عناوين الأيبي [[Special:GlobalBlockList|عبر ويكيات متعددة]]",
@@ -85,9 +86,12 @@
 	"globalblocking-whitelist-dewhitelisted": "أنت أعدت تفعيل المنع العام #$2 على عنوان الأيبي '''$1''' في {{SITENAME}}.",
 	"globalblocking-whitelist-nochange": "أنت لم تقم بأي تغيير للحالة المحلية لهذا المنع.",
 	"globalblocking-whitelist-intro": "يمكنك استخدام هذه الاستمارة لتعديل الحالة المحلية لمنع عام. لو أن منعا عاما تم تعطيله في هذا الويكي، المستخدمون على عنوان الأيبي المتأثر سيمكنهم التعديل بشكل طبيعي.",
-	"globalblocking-ipblocked": "'''عنوان الأيبي الخاص بك ممنوع من التعديل على جميع مواقع الويكي.'''\n\nقام بعملية المنع $1 ($2).\nالسبب وراء عملية المنع هو ''$3''.\n\n* بداية فترة المنع: $4\n* نهاية فترة المنع: $5\n\nيمكنك مراسلة $1 لتناقش عملية المنع هذه.\nلن تتمكن من استخدام خاصية \"{{int:emailuser}}\" حتى تحدد عنوان بريد صحيح في [[Special:Preferences|تفضيلات حسابك]] وأن تكون غير ممنوعا من استخدامها.\nعنوان الأيبي الحالي لك هو $6.\nبرجاء تضمين كل التفاصيل أعلاه في أي استعلام تقوم به.",
-	"globalblocking-ipblocked-range": "'''عنوان الأيبي الخاص بك يقع في نطاق ممنوع من التعديل على جميع مواقع الويكي.'''\n\nقام بعملية المنع $1 ($2).\nالسبب وراء عملية المنع هو ''$3''.\n\n* بداية فترة المنع: $4\n* نهاية فترة المنع: $5\n\nيمكنك مراسلة $1 لتناقش عملية المنع هذه.\nلن تتمكن من استخدام خاصية \"{{int:emailuser}}\" حتى تحدد عنوان بريد صحيح في [[Special:Preferences|تفضيلات حسابك]] وأن تكون غير ممنوعا من استخدامها.\nعنوان الأيبي الحالي لك هو $6، والنطاق الممنوع هو $7.\nبرجاء تضمين كل التفاصيل أعلاه في أي استعلام تقوم به.",
-	"globalblocking-ipblocked-xff": "'''لقد تم منع خادم وكيل أو أكثر ممن إستخدموا في طلبك على المستوى العام'''\n\n\nتم فرض المنع من قبل $1 ($2).\nالسبب المعطى هو ''$3''.\n\n*بداية المنع: $4\n*نهاية المنع: $5 \n\nيمكنك التحدث مع $1 لمناقشة المنع.\nلا يمكنك استخدام خاصية \"{{int:emailuser}}\" إلا إذا قمت بتوفير بريد الإلكتروني في [[Special:Preferences|تفضيلات حسابك]] ولم يتم منعك من استخدامه.\nعنوان الخادم الوكيل الممنوع هو $6.\nالرجاء إدارج كل التفاصيل المذكورة أعلاه في أي إستفسار تقوم به.",
+	"globalblocking-blockedtext-ip": "'''{{int:globalblocking-blockedtext-all-wikis}}'''\n\n{{int:blockedtext-made-by|$1}}\n{{int:blockedtext-reason-comment|$2}}.\n\n* {{int:blockedtext-start-time|$8}}\n* {{int:blockedtext-expiration-time|$6}}\n\n{{int:globalblocking-blockedtext-blocker-admin|$1}}\n{{int:globalblocking-blockedtext-email-feature}}\n{{int:blockedtext-block-ip|$3}}\n{{int:blockedtext-include-details-queries}}",
+	"globalblocking-blockedtext-range": "'''{{int:globalblocking-blockedtext-on-range}}'''\n\n{{int:blockedtext-made-by|$1}}\n{{int:blockedtext-reason-comment|$2}}.\n\n* {{int:blockedtext-start-time|$8}}\n* {{int:blockedtext-expiration-time|$6}}\n\n{{int:globalblocking-blockedtext-blocker-admin|$1}}\n{{int:globalblocking-blockedtext-email-feature}}\n{{int:blockedtext-block-ip|$3}} {{int:globalblocking-blockedtext-ip-range|$7}}\n{{int:blockedtext-include-details-queries}}",
+	"globalblocking-blockedtext-xff": "'''{{int:globalblocking-blockedtext-on-proxy}}'''\n\n{{int:blockedtext-made-by|$1}}\n{{int:blockedtext-reason-comment|$2}}.\n\n* {{int:blockedtext-start-time|$8}}\n* {{int:blockedtext-expiration-time|$6}}\n\n{{int:globalblocking-blockedtext-blocker-admin|$1}}\n{{int:globalblocking-blockedtext-email-feature}}\n{{int:globalblocking-blockedtext-proxy|$7}}\n{{int:blockedtext-include-details-queries}}",
+	"globalblocking-ipblocked": "'' '{{int: globalblocking-blocktext-all-wikis}}' ''! N !! N! {{int: blocktext-made-by | $1 }}! N! {{int: blocktext-reason-comment | $2 }}.! N !! N! * {{int: blocktext-start-time | $8 }}! N! * {{int: blocktext-expiration-time | $6 }}! N !! N! {{int: globalblocking-blocktext-blocker-admin | $1 }}! N! {{int: globalblocking-blocktext-email-feature}}! N! {{int: blocktext-block-ip | $3 }}! N! {{int: blocktext-include-details-queries}}",
+	"globalblocking-ipblocked-range": "'' '{{int: globalblocking-blocktext-on-range}}' ''! N !! N! {{int: blocktext-made-by | $1 }}! N! {{int: blocktext-reason-comment | $2 }}.! N !! N! * {{int: blocktext-start-time | $8 }}! N! * {{int: blocktext-expiration-time | $6 }}! N !! N! {{int: globalblocking-blocktext-blocker-admin | $1 }}! N! {{int: globalblocking-blocktext-email-feature}}! N! {{int: blocktext-block-ip | $3 }} {{int: globalblocking-blocktext-ip-range | $7 }}! N! {{int: blocktext-include-details-queries}}",
+	"globalblocking-ipblocked-xff": "'' '{{int: globalblocking-blocktext-on-proxy}}' ''! N !! N! {{int: blocktext-made-by | $1 }}! N! {{int: blocktext-reason-comment | $2 }}.! N !! N! * {{int: blocktext-start-time | $8 }}! N! * {{int: blocktext-expiration-time | $6 }}! N !! N! {{int: globalblocking-blocktext-blocker-admin | $1 }}! N! {{int: globalblocking-blocktext-email-feature}}! N! {{int: globalblocking-blocktext-proxy | $7 }}! N! {{int: blocktext-include-details-queries}}",
 	"globalblocking-blocked-nopassreset": "لا يمكنك إعادة ضبط كلمات سر المستخدم لأنك ممنوع منعا عاما.",
 	"globalblocking-logpage": "سجل المنع العام",
 	"globalblocking-logpagetext": "هذا سجل بعمليات المنع العامة التي تم عملها وإزالتها على هذا الويكي.\nينبغي ملاحظة أن عمليات المنع العامة يمكن عملها وإزالتها على الويكيات الأخرى، وأن عمليات المنع العامة هذه ربما تؤثر على هذا الويكي.\nلرؤية كل عمليات المنع العامة النشطة، يمكنك رؤية [[Special:GlobalBlockList|قائمة المنع العامة]].",
@@ -122,5 +126,11 @@
 	"log-action-filter-gblblock-modify": "تعديل المنع العالمي",
 	"log-action-filter-gblblock-whitelist": "إضافة قائمة منع بيضاء عالمية",
 	"log-action-filter-gblblock-dwhitelist": "إزالة قائمة منع بيضاء عالمية",
-	"grant-globalblock": "منع أو إلغاء منع عنوان أيبي عالميا"
+	"grant-globalblock": "منع أو إلغاء منع عنوان أيبي عالميا",
+	"globalblocking-blockedtext-on-range": "عنوان IP الخاص بك موجود في نطاق تم حظره على جميع مواقع الويكي.",
+	"globalblocking-blockedtext-on-proxy": "تم حظر خادم وكيل واحد أو أكثر يستخدمه طلبك بشكل عام",
+	"globalblocking-blockedtext-blocker-admin": "يمكنك الاتصال بـ $1 لمناقشة الحظر.",
+	"globalblocking-blockedtext-email-feature": "لا يمكنك استخدام ميزة \"{{int: emailuser}}\" ما لم يتم تحديد عنوان بريد إلكتروني صالح في [[Special: Preferences | تفضيلات الحساب]] ولم يتم منعك من استخدامها.",
+	"globalblocking-blockedtext-ip-range": "النطاق المحظور هو $1 .",
+	"globalblocking-blockedtext-proxy": "كان عنوان الوكيل المحظور $1 ."
 }

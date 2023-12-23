@@ -8,9 +8,9 @@ use HTMLForm;
 use ManualLogEntry;
 use MediaWiki\Block\BlockUtils;
 use MediaWiki\Extension\GlobalBlocking\GlobalBlocking;
+use MediaWiki\Title\Title;
 use MediaWiki\User\UserIdentity;
 use SpecialPage;
-use Title;
 use Wikimedia\IPUtils;
 
 class SpecialGlobalBlockStatus extends FormSpecialPage {
@@ -85,7 +85,7 @@ class SpecialGlobalBlockStatus extends FormSpecialPage {
 	}
 
 	protected function alterForm( HTMLForm $form ) {
-		$form->setPreText( $this->msg( 'globalblocking-whitelist-intro' )->parse() );
+		$form->setPreHtml( $this->msg( 'globalblocking-whitelist-intro' )->parse() );
 		$form->setWrapperLegendMsg( 'globalblocking-whitelist-legend' );
 		$form->setSubmitTextMsg( 'globalblocking-whitelist-submit' );
 	}

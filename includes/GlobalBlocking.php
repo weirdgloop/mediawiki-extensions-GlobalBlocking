@@ -5,17 +5,17 @@ namespace MediaWiki\Extension\GlobalBlocking;
 use Exception;
 use LogPage;
 use MediaWiki\Block\BlockUser;
-use MediaWiki\Block\DatabaseBlock;
 use MediaWiki\Extension\GlobalBlocking\Hook\GlobalBlockingHookRunner;
 use MediaWiki\MediaWikiServices;
+use MediaWiki\Title\Title;
+use MediaWiki\WikiMap\WikiMap;
 use Message;
-use MWException;
+use RequestContext;
 use SpecialPage;
 use StatusValue;
 use stdClass;
-use Title;
+use UnexpectedValueException;
 use User;
-use WikiMap;
 use Wikimedia\IPUtils;
 use Wikimedia\Rdbms\DBUnexpectedError;
 use Wikimedia\Rdbms\IResultWrapper;
@@ -31,9 +31,8 @@ class GlobalBlocking {
 
 	/**
 	 * @param User $user
-	 * @param string $ip
-	 * @return DatabaseBlock|null
-	 * @throws MWException
+	 * @param string|null $ip
+	 * @return GlobalBlock|null
 	 */
 	public static function getUserBlock( $user, $ip ) {
 		$details = static::getUserBlockDetails( $user, $ip );
@@ -49,6 +48,7 @@ class GlobalBlocking {
 					'timestamp' => $row->gb_timestamp,
 					'anonOnly' => $row->gb_anon_only,
 					'expiry' => $row->gb_expiry,
+					'xff' => $details['xff'] ?? false,
 				]
 			);
 			return $block;
@@ -61,7 +61,6 @@ class GlobalBlocking {
 	 * @param User $user
 	 * @param string $ip
 	 * @return Message[] empty or message objects
-	 * @throws MWException
 	 */
 	public static function getUserBlockErrors( $user, $ip ) {
 		$details = static::getUserBlockDetails( $user, $ip );
@@ -69,18 +68,17 @@ class GlobalBlocking {
 	}
 
 	/**
-	 * @param User $user
-	 * @param string $ip
+	 * @param User $user Note this may not be the session user.
+	 * @param string|null $ip
 	 * @return array ['block' => DB row, 'error' => empty or message objects]
 	 * @phan-return array{block:stdClass|null,error:Message[]}
-	 * @throws MWException
 	 */
 	private static function getUserBlockDetails( $user, $ip ) {
-		global $wgLang, $wgRequest, $wgGlobalBlockingBlockXFF;
-		static $result = null;
-
 		// Instance cache
-		if ( $result !== null ) {
+		static $cachedResults = [];
+		$result = &$cachedResults[$user->getName()];
+
+		if ( isset( $result ) ) {
 			return $result;
 		}
 
@@ -94,8 +92,18 @@ class GlobalBlocking {
 			return $result;
 		}
 
+		// We have callers from different code paths, better not assuming $ip is null
+		// for the non-session user.
+		$context = RequestContext::getMain();
+		$isSessionUser = $user->equals( $context->getUser() );
+		if ( $ip === null && !$isSessionUser && IPUtils::isIPAddress( $user->getName() ) ) {
+			// Populate the IP for checking blocks against non-session users.
+			$ip = $user->getName();
+		}
+
+		$config = $services->getMainConfig();
 		if ( $ip !== null ) {
-			$ranges = $services->getMainConfig()->get( 'GlobalBlockingAllowedRanges' );
+			$ranges = $config->get( 'GlobalBlockingAllowedRanges' );
 			foreach ( $ranges as $range ) {
 				if ( IPUtils::isInRange( $ip, $range ) ) {
 					$result = [ 'block' => null, 'error' => [] ];
@@ -107,9 +115,10 @@ class GlobalBlocking {
 
 		$statsdFactory->increment( 'global_blocking.get_user_block_db_query' );
 
-		$hookRunner = GlobalBlockingHookRunner::getRunner();
+		$hookRunner = new GlobalBlockingHookRunner( $services->getHookContainer() );
 
-		$block = self::getGlobalBlockingBlock( $ip, $user->isAnon() );
+		$lang = $context->getLanguage();
+		$block = self::getGlobalBlockingBlock( $ip, !$user->isNamed() );
 		if ( $block ) {
 			// Check for local whitelisting
 			if ( self::getLocalWhitelistInfo( $block->gb_id ) ) {
@@ -118,8 +127,8 @@ class GlobalBlocking {
 				return $result;
 			}
 
-			$blockTimestamp = $wgLang->timeanddate( wfTimestamp( TS_MW, $block->gb_timestamp ), true );
-			$blockExpiry = $wgLang->formatExpiry( $block->gb_expiry );
+			$blockTimestamp = $lang->timeanddate( wfTimestamp( TS_MW, $block->gb_timestamp ), true );
+			$blockExpiry = $lang->formatExpiry( $block->gb_expiry );
 			$display_wiki = WikiMap::getWikiName( $block->gb_by_wiki );
 			$blockingUser = self::maybeLinkUserpage( $block->gb_by_wiki, $block->gb_by );
 
@@ -131,7 +140,7 @@ class GlobalBlocking {
 				$errorMsg = 'globalblocking-ipblocked-range';
 				$hookRunner->onGlobalBlockingBlockedIpRangeMsg( $errorMsg );
 			} else {
-				throw new MWException(
+				throw new UnexpectedValueException(
 					"This should not happen. IP globally blocked is not valid and is not a valid range?"
 				);
 			}
@@ -159,20 +168,22 @@ class GlobalBlocking {
 			return $result;
 		}
 
-		if ( $wgGlobalBlockingBlockXFF ) {
-			$xffIps = $wgRequest->getHeader( 'X-Forwarded-For' );
+		$request = $context->getRequest();
+		// Checking non-session users are not applicable to the XFF block.
+		if ( $config->get( 'GlobalBlockingBlockXFF' ) && $isSessionUser ) {
+			$xffIps = $request->getHeader( 'X-Forwarded-For' );
 			if ( $xffIps ) {
 				$xffIps = array_map( 'trim', explode( ',', $xffIps ) );
-				$blocks = self::checkIpsForBlock( $xffIps, $user->isAnon() );
+				$blocks = self::checkIpsForBlock( $xffIps, !$user->isNamed() );
 				if ( count( $blocks ) > 0 ) {
 					$appliedBlock = self::getAppliedBlock( $xffIps, $blocks );
 					if ( $appliedBlock !== null ) {
 						list( $blockIP, $block ) = $appliedBlock;
-						$blockTimestamp = $wgLang->timeanddate(
+						$blockTimestamp = $lang->timeanddate(
 							wfTimestamp( TS_MW, $block->gb_timestamp ),
 							true
 						);
-						$blockExpiry = $wgLang->formatExpiry( $block->gb_expiry );
+						$blockExpiry = $lang->formatExpiry( $block->gb_expiry );
 						$display_wiki = WikiMap::getWikiName( $block->gb_by_wiki );
 						$blockingUser = self::maybeLinkUserpage( $block->gb_by_wiki, $block->gb_by );
 						// Allow site customization of blocked message.
@@ -191,6 +202,7 @@ class GlobalBlocking {
 									$blockIP
 								)
 							],
+							'xff' => true,
 						];
 						return $result;
 					}
@@ -377,7 +389,7 @@ class GlobalBlocking {
 		$factory = MediaWikiServices::getInstance()->getDBLoadBalancerFactory();
 		$lb = $factory->getMainLB( $wgGlobalBlockingDatabase );
 
-		return $lb->getConnectionRef( $dbtype, 'globalblocking', $wgGlobalBlockingDatabase );
+		return $lb->getConnection( $dbtype, 'globalblocking', $wgGlobalBlockingDatabase );
 	}
 
 	/**
