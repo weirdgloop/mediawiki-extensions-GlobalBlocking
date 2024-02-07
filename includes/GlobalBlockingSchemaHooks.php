@@ -11,6 +11,7 @@ class GlobalBlockingSchemaHooks implements LoadExtensionSchemaUpdatesHook {
 
 	/**
 	 * This is static since LoadExtensionSchemaUpdates does not allow service dependencies
+	 * @codeCoverageIgnore Tested by updating or installing MediaWiki.
 	 * @param DatabaseUpdater $updater
 	 */
 	public function onLoadExtensionSchemaUpdates( $updater ) {
@@ -75,6 +76,18 @@ class GlobalBlockingSchemaHooks implements LoadExtensionSchemaUpdatesHook {
 				"$base/sql/$type/patch-global_block_whitelist-timestamps.sql"
 			);
 		}
+
+		// 1.42
+		$updater->addExtensionField(
+			'globalblocks',
+			'gb_target_central_id',
+			"$base/sql/$type/patch-add-gb_target_central_id.sql"
+		);
+		$updater->addExtensionField(
+			'global_block_whitelist',
+			'gbw_target_central_id',
+			"$base/sql/$type/patch-add-gbw_target_central_id.sql"
+		);
 	}
 
 	/**
