@@ -2,10 +2,10 @@
 	"@metadata": {
 		"authors": [
 			"Ernác",
-			"Iltever"
+			"Iltever",
+			"Къарачайлы"
 		]
 	},
-	"globalblocking-expiringblock": "$1 $2 бошаллыкъды",
-	"globalblocklist": "Глобал халда блокланнган IP-адреслени списогу",
+	"globalblocklist": "Глобал халда блокланнган IP-адреслени тизмеси",
 	"globalblockstatus": "Глобал блоклауланы локал халлары"
 }

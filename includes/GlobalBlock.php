@@ -3,44 +3,76 @@
 namespace MediaWiki\Extension\GlobalBlocking;
 
 use MediaWiki\Block\AbstractBlock;
-use CentralIdLookup;
 use MediaWiki\MediaWikiServices;
+use MediaWiki\User\CentralId\CentralIdLookup;
 use MediaWiki\User\UserIdentity;
+use MediaWiki\User\UserIdentityValue;
 use MediaWiki\WikiMap\WikiMap;
 use stdClass;
-use User;
 
 class GlobalBlock extends AbstractBlock {
-	/** @var int */
-	private $id;
-
-	/** @var array */
-	protected $error;
-
-	/** @var bool */
-	protected $xff;
-
-	/** @var UserIdentity|null */
-	private $blocker;
+	private int $id;
+	private bool $xff;
+	private bool $isAutoBlock;
+	private bool $isAutoblocking;
+	private ?UserIdentity $blocker;
 
 	/**
-	 * @param stdClass $block
-	 * @param array $error
-	 * @param array $options
+	 * Constructs a GlobalBlock instance from a database returned row returned by GlobalBlockLookup.
+	 *
+	 * @param stdClass $row The database row
+	 * @param bool $xff Whether this was triggered by the XFF header containing a globally blocked IP address
+	 * @return GlobalBlock
+	 * @internal You should get a GlobalBlock instance through the {@link GlobalBlockLookup} service in most cases
 	 */
-	public function __construct( stdClass $block, array $error, $options ) {
+	public static function newFromRow( stdClass $row, bool $xff ): GlobalBlock {
+		return new GlobalBlock(
+			[
+				'id' => $row->gb_id,
+				'isAutoblock' => boolval( $row->gb_autoblock_parent_id ),
+				'enableAutoblock' => $row->gb_enable_autoblock,
+				'byCentralId' => $row->gb_by_central_id,
+				'byWiki' => $row->gb_by_wiki,
+				'address' => $row->gb_address,
+				'reason' => $row->gb_reason,
+				'timestamp' => $row->gb_timestamp,
+				'anonOnly' => $row->gb_anon_only,
+				'expiry' => $row->gb_expiry,
+				'createAccount' => $row->gb_create_account,
+				'xff' => $xff,
+			]
+		);
+	}
+
+	/**
+	 * @param array $options Parameters of the block, with options supported by {@link AbstractBlock::__construct} and:
+	 *   - id: (int) The ID of the global block from the 'globalblocks' table
+	 *   - isAutoblock: (bool) Is this an automatic block?
+	 *   - enableAutoblock: (bool) Enable automatic blocking
+	 *   - expiry: (string) Database timestamp of expiration of the block or 'infinity'
+	 *   - anonOnly: (bool) Only disallow anonymous actions
+	 *   - createAccount: (bool) Disallow creation of new accounts
+	 *   - byCentralId: (int) Central ID of the blocker
+	 *   - byWiki: (string) Wiki ID of the wiki where the blocker performed the block
+	 *   - xff: (bool) Did this block match the current user because one of their XFF IPs were blocked?
+	 *
+	 * @internal You should get a GlobalBlock instance through the {@link GlobalBlockLookup} service.
+	 */
+	public function __construct( array $options ) {
+		// We need to set isAutoBlock before calling the parent, because the parent calls ::getType which then
+		// accesses this property.
+		$this->isAutoBlock = (bool)$options['isAutoblock'];
+
 		parent::__construct( $options );
 
-		$db = MediaWikiServices::getInstance()
-			->getDBLoadBalancerFactory()
-			->getMainLB( $this->getWikiId() )
-			->getConnection( DB_REPLICA, [], $this->getWikiId() );
+		$db = MediaWikiServices::getInstance()->getConnectionProvider()->getReplicaDatabase( $this->getWikiId() );
 		$this->setExpiry( $db->decodeExpiry( $options['expiry'] ) );
 
-		$this->id = $block->gb_id;
-		$this->error = $error;
+		$this->id = (int)$options['id'];
 		$this->xff = (bool)$options['xff'];
-		$this->setGlobalBlocker( $block );
+		$this->isAutoblocking = (bool)$options['enableAutoblock'];
+		$this->isCreateAccountBlocked( (bool)$options['createAccount'] );
+		$this->setGlobalBlocker( $options );
 	}
 
 	/**
@@ -72,8 +104,11 @@ class GlobalBlock extends AbstractBlock {
 		return $this->getId( $wikiId );
 	}
 
-	/** @inheritDoc */
-	public function getId( $wikiId = self::LOCAL ): ?int {
+	/**
+	 * @inheritDoc
+	 * @return int
+	 */
+	public function getId( $wikiId = self::LOCAL ): int {
 		return $this->id;
 	}
 
@@ -82,17 +117,30 @@ class GlobalBlock extends AbstractBlock {
 	}
 
 	/**
-	 * @param stdClass $block DB row from globalblocks table
+	 * Does the block cause autoblocks to be created?
+	 *
+	 * @return bool
 	 */
-	public function setGlobalBlocker( stdClass $block ) {
-		$lookup = MediaWikiServices::getInstance()
-			->getCentralIdLookupFactory()
-			->getLookup();
+	public function isAutoblocking(): bool {
+		return $this->getType() == self::TYPE_USER ? $this->isAutoblocking : false;
+	}
 
-		$user = $lookup->localUserFromCentralId( $block->gb_by_central_id, CentralIdLookup::AUDIENCE_RAW );
+	/** @inheritDoc */
+	public function getType(): ?int {
+		return $this->isAutoBlock ? self::TYPE_AUTO : parent::getType();
+	}
+
+	/**
+	 * @param array $options Options for the $block provided in ::__construct
+	 */
+	private function setGlobalBlocker( array $options ) {
+		$services = MediaWikiServices::getInstance();
+		$lookup = $services->getCentralIdLookup();
+
+		$user = $lookup->localUserFromCentralId( $options['byCentralId'], CentralIdLookup::AUDIENCE_RAW );
 
 		// If the block was inserted from this wiki, then we know the blocker exists
-		if ( $user && $block->gb_by_wiki === WikiMap::getCurrentWikiId() ) {
+		if ( $user && $options['byWiki'] === WikiMap::getCurrentWikiId() ) {
 			$this->blocker = $user;
 			return;
 		}
@@ -100,43 +148,24 @@ class GlobalBlock extends AbstractBlock {
 		// If the blocker is the same user on the foreign wiki and the current wiki
 		// then we can use the username
 		if ( $user && $user->getId() && $lookup->isAttached( $user )
-			&& $lookup->isAttached( $user, $block->gb_by_wiki )
+			&& $lookup->isAttached( $user, $options['byWiki'] )
 		) {
 			$this->blocker = $user;
 			return;
 		}
 
-		$username = $lookup->nameFromCentralId( $block->gb_by_central_id, CentralIdLookup::AUDIENCE_RAW );
-
 		// They don't exist locally, so we need to use an interwiki username
-		$this->blocker = User::newFromName( "{$block->gb_by_wiki}>{$username}", false );
-	}
+		$username = $lookup->nameFromCentralId( $options['byCentralId'], CentralIdLookup::AUDIENCE_RAW );
 
-	/**
-	 * @inheritDoc
-	 */
-	public function appliesToRight( $right ) {
-		$res = parent::appliesToRight( $right );
-		switch ( $right ) {
-			case 'upload':
-				return true;
-			case 'createaccount':
-				return true;
+		if ( $username !== null ) {
+			$this->blocker = $services->getUserFactory()->newFromUserIdentity( UserIdentityValue::newExternal(
+				$options['byWiki'], $username
+			) );
+			return;
 		}
-		return $res;
-	}
 
-	/**
-	 * @inheritDoc
-	 */
-	public function appliesToPasswordReset() {
-		return true;
-	}
-
-	/**
-	 * @inheritDoc
-	 */
-	public function isCreateAccountBlocked( $x = null ): bool {
-		return true;
+		// If all else fails, then set the blocker as null. This shouldn't happen unless the central ID for the
+		// performer of the block is broken.
+		$this->blocker = null;
 	}
 }

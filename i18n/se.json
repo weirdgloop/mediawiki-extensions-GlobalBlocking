@@ -5,10 +5,9 @@
 			"Yupik"
 		]
 	},
-	"globalblocking-ipaddress": "IP-čujuhus:",
-	"globalblocking-search-ip": "IP-čujuhus:",
+	"globalblocking-target": "Geavaheaddjinamma, IP-čujuhus dahje IP-čujuhusráidu:",
 	"globalblocking-list-unblock": "sihko",
 	"globalblocking-list-tempblocks": "Čiega gaskaboddosaš hehttemiid",
 	"globalblocking-list-indefblocks": "Čiega bissovaš hehttemiid",
-	"globalblocking-expiringblock": "boarásnuvvá $1 dii. $2"
+	"globalblocking-list-autoblocks": "Čiega automáhtalaš hehttemiid"
 }

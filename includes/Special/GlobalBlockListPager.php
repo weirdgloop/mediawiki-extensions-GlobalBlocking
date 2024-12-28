@@ -2,145 +2,134 @@
 
 namespace MediaWiki\Extension\GlobalBlocking\Special;
 
-use CentralIdLookup;
-use Html;
-use HtmlArmor;
-use IContextSource;
+use InvalidArgumentException;
 use MediaWiki\CommentFormatter\CommentFormatter;
-use MediaWiki\Extension\GlobalBlocking\GlobalBlocking;
+use MediaWiki\Context\IContextSource;
+use MediaWiki\Extension\GlobalBlocking\Services\GlobalBlockingConnectionProvider;
+use MediaWiki\Extension\GlobalBlocking\Services\GlobalBlockingGlobalBlockDetailsRenderer;
+use MediaWiki\Extension\GlobalBlocking\Services\GlobalBlockingLinkBuilder;
+use MediaWiki\Extension\GlobalBlocking\Services\GlobalBlockLookup;
+use MediaWiki\Html\Html;
 use MediaWiki\Linker\LinkRenderer;
-use MediaWiki\WikiMap\WikiMap;
-use ReverseChronologicalPager;
-use SpecialPage;
-use User;
+use MediaWiki\Pager\IndexPager;
+use MediaWiki\Pager\TablePager;
+use MediaWiki\SpecialPage\SpecialPage;
 
-class GlobalBlockListPager extends ReverseChronologicalPager {
-	/** @var array */
-	private $queryConds;
+class GlobalBlockListPager extends TablePager {
+	private array $queryConds;
 
-	/** @var CommentFormatter */
-	private $commentFormatter;
+	private CommentFormatter $commentFormatter;
+	private GlobalBlockingLinkBuilder $globalBlockingLinkBuilder;
+	private GlobalBlockingGlobalBlockDetailsRenderer $globalBlockDetailsRenderer;
 
-	/** @var CentralIdLookup */
-	private $lookup;
-
-	/**
-	 * @param IContextSource $context
-	 * @param array $conds
-	 * @param LinkRenderer $linkRenderer
-	 * @param CommentFormatter $commentFormatter
-	 * @param CentralIdLookup $lookup
-	 */
 	public function __construct(
 		IContextSource $context,
 		array $conds,
 		LinkRenderer $linkRenderer,
 		CommentFormatter $commentFormatter,
-		CentralIdLookup $lookup
+		GlobalBlockingLinkBuilder $globalBlockingLinkBuilder,
+		GlobalBlockingConnectionProvider $globalBlockingConnectionProvider,
+		GlobalBlockingGlobalBlockDetailsRenderer $globalBlockDetailsRenderer
 	) {
-		// Set database before parent constructor to avoid setting it there with wfGetDB
-		$this->mDb = GlobalBlocking::getGlobalBlockingDatabase( DB_REPLICA );
+		// Set database before parent constructor so that the DB that has the globalblocks table is used
+		// over the local database which may not be the same database.
+		$this->mDb = $globalBlockingConnectionProvider->getReplicaGlobalBlockingDatabase();
 		parent::__construct( $context, $linkRenderer );
 		$this->queryConds = $conds;
 		$this->commentFormatter = $commentFormatter;
-		$this->lookup = $lookup;
+		$this->globalBlockingLinkBuilder = $globalBlockingLinkBuilder;
+		$this->globalBlockDetailsRenderer = $globalBlockDetailsRenderer;
+
+		$this->getOutput()->addModuleStyles( [ 'mediawiki.interface.helpers.styles', 'ext.globalBlocking.styles' ] );
+		$this->mDefaultDirection = IndexPager::DIR_DESCENDING;
 	}
 
-	public function formatRow( $row ) {
-		$lang = $this->getLanguage();
-		$user = $this->getUser();
-		$options = [];
+	protected function getFieldNames() {
+		return [
+			'gb_timestamp' => $this->msg( 'globalblocking-list-table-heading-timestamp' )->text(),
+			'target' => $this->msg( 'globalblocking-list-table-heading-target' )->text(),
+			'gb_expiry' => $this->msg( 'globalblocking-list-table-heading-expiry' )->text(),
+			'by' => $this->msg( 'globalblocking-list-table-heading-by' )->text(),
+			'params' => $this->msg( 'globalblocking-list-table-heading-params' )->text(),
+			'gb_reason' => $this->msg( 'globalblocking-list-table-heading-reason' )->text(),
+		];
+	}
 
-		$expiry = $lang->formatExpiry( $row->gb_expiry, TS_MW );
-		if ( $expiry == 'infinity' ) {
-			$options[] = $this->msg( 'globalblocking-infiniteblock' )->parse();
-		} else {
-			$options[] = $this->msg(
-				'globalblocking-expiringblock',
-				$lang->userDate( $expiry, $user ),
-				$lang->userTime( $expiry, $user )
-			)->parse();
+	/**
+	 * @param string $name
+	 * @param string|null $value
+	 * @return string
+	 */
+	public function formatValue( $name, $value ) {
+		$row = $this->mCurrentRow;
+
+		switch ( $name ) {
+			case 'gb_timestamp':
+				// Link the timestamp to the block ID. This allows users without permissions to change blocks
+				// to be able to generate a link to a specific block.
+				return $this->getLinkRenderer()->makeKnownLink(
+					SpecialPage::getTitleFor( 'GlobalBlockList' ),
+					$this->getLanguage()->userTimeAndDate( $value, $this->getUser() ),
+					[],
+					[ 'target' => "#{$row->gb_id}" ],
+				);
+			case 'target':
+				return $this->globalBlockDetailsRenderer->formatTargetForDisplay( $row, $this->getContext() );
+			case 'gb_expiry':
+				$targetForUrl = $row->gb_address;
+				if ( $row->gb_autoblock_parent_id ) {
+					$targetForUrl = '#' . $row->gb_id;
+				}
+				$actionLinks = Html::rawElement(
+					'span',
+					[ 'class' => 'mw-globalblocking-globalblocklist-actions' ],
+					$this->globalBlockingLinkBuilder->getActionLinks(
+						$this->getAuthority(), $targetForUrl, $this->getContext()
+					)
+				);
+				return $this->msg( 'globalblocking-list-table-cell-expiry' )
+					->expiryParams( $value )
+					->rawParams( $actionLinks )
+					->parse();
+			case 'by':
+				return $this->globalBlockDetailsRenderer->getPerformerForDisplay( $row, $this->getContext() );
+			case 'gb_reason':
+				return $this->commentFormatter->format( $value );
+			case 'params':
+				$options = $this->globalBlockDetailsRenderer->getBlockOptionsForDisplay( $row, $this->getContext() );
+
+				// Wrap the options in <li> HTML tags to make the options into a list.
+				$options = array_map( static function ( $prop ) {
+					return Html::rawElement( 'li', [], $prop );
+				}, $options );
+
+				return Html::rawElement( 'ul', [], implode( '', $options ) );
+			default:
+				throw new InvalidArgumentException( "Unable to format $name" );
 		}
-
-		// Check for whitelisting.
-		$wlinfo = GlobalBlocking::getLocalWhitelistInfo( $row->gb_id );
-		if ( $wlinfo ) {
-			$options[] = $this->msg(
-				'globalblocking-list-whitelisted',
-				User::whois( $wlinfo['user'] ), $wlinfo['reason']
-			)->text();
-		}
-
-		if ( $row->gb_anon_only ) {
-			$options[] = $this->msg( 'globalblocking-list-anononly' )->text();
-		}
-
-		// Do afterthoughts (comment, links for admins)
-		$info = [];
-		$canBlock = $user->isAllowed( 'globalblock' );
-		if ( $canBlock ) {
-			$info[] = $this->getLinkRenderer()->makeKnownLink(
-				SpecialPage::getTitleFor( 'RemoveGlobalBlock' ),
-				new HtmlArmor( $this->msg( 'globalblocking-list-unblock' )->parse() ),
-				[],
-				[ 'address' => $row->gb_address ]
-			);
-		}
-
-		if ( $this->getConfig()->get( 'ApplyGlobalBlocks' )
-				&& $user->isAllowed( 'globalblock-whitelist' ) ) {
-			$info[] = $this->getLinkRenderer()->makeKnownLink(
-				SpecialPage::getTitleFor( 'GlobalBlockStatus' ),
-				new HtmlArmor( $this->msg( 'globalblocking-list-whitelist' )->parse() ),
-				[],
-				[ 'address' => $row->gb_address ]
-			);
-		}
-
-		if ( $canBlock ) {
-			$info[] = $this->getLinkRenderer()->makeKnownLink(
-				SpecialPage::getTitleFor( 'GlobalBlock' ),
-				new HtmlArmor( $this->msg( 'globalblocking-list-modify' )->parse() ),
-				[],
-				[ 'wpAddress' => $row->gb_address ]
-			);
-		}
-
-		$timestamp = $row->gb_timestamp;
-		$timestamp = $lang->userTimeAndDate( wfTimestamp( TS_MW, $timestamp ), $user );
-		// Userpage link / Info on originating wiki
-		$displayWiki = WikiMap::getWikiName( $row->gb_by_wiki );
-		$userDisplay = GlobalBlocking::maybeLinkUserpage(
-			$row->gb_by_wiki,
-			$this->lookup->nameFromCentralId( $row->gb_by_central_id ) ?? ''
-		);
-		$infoItems = count( $info )
-			? $this->msg( 'parentheses' )->rawParams( $lang->pipeList( $info ) )->escaped()
-			: '';
-
-		// Put it all together.
-		return Html::rawElement( 'li', [],
-			$this->msg( 'globalblocking-list-blockitem',
-				$timestamp,
-				$userDisplay,
-				$displayWiki,
-				$row->gb_address,
-				$lang->commaList( $options )
-			)->parse() . ' ' .
-				$this->commentFormatter->formatBlock( $row->gb_reason ) . ' ' .
-				$infoItems
-		);
 	}
 
 	public function getQueryInfo() {
 		return [
 			'tables' => 'globalblocks',
-			'fields' => GlobalBlocking::selectFields(),
+			'fields' => GlobalBlockLookup::selectFields(),
 			'conds' => $this->queryConds,
 		];
 	}
 
 	public function getIndexField() {
 		return 'gb_timestamp';
+	}
+
+	protected function getTableClass() {
+		return parent::getTableClass() . ' mw-globalblocking-globalblocklist';
+	}
+
+	public function getDefaultSort() {
+		return '';
+	}
+
+	protected function isFieldSortable( $name ) {
+		return false;
 	}
 }

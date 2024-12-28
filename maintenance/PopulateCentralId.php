@@ -8,10 +8,8 @@ if ( $IP === false ) {
 }
 require_once "$IP/maintenance/Maintenance.php";
 
-use CentralIdLookup;
-use LoggedUpdateMaintenance;
-use MediaWiki\Extension\GlobalBlocking\GlobalBlocking;
-use MediaWiki\MediaWikiServices;
+use MediaWiki\Maintenance\LoggedUpdateMaintenance;
+use MediaWiki\User\CentralId\CentralIdLookup;
 use MediaWiki\WikiMap\WikiMap;
 
 /**
@@ -36,18 +34,19 @@ class PopulateCentralId extends LoggedUpdateMaintenance {
 	 * @inheritDoc
 	 */
 	public function doDbUpdates() {
-		$dbr = GlobalBlocking::getGlobalBlockingDatabase( DB_REPLICA );
-		$dbw = GlobalBlocking::getGlobalBlockingDatabase( DB_PRIMARY );
-		$services = MediaWikiServices::getInstance();
-		$lbFactory = $services->getDBLoadBalancerFactory();
+		$dbw = $this->getDB( DB_PRIMARY );
+		$services = $this->getServiceContainer();
 		$lookup = $services->getCentralIdLookup();
-		$domain = $services->getMainConfig()->get( 'GlobalBlockingDatabase' );
 		$wikiId = WikiMap::getCurrentWikiId();
 
 		$batchSize = $this->getBatchSize();
 		$count = 0;
 		$failed = 0;
-		$lastBlock = $dbr->selectField( 'globalblocks', 'MAX(gb_id)', '', __METHOD__ );
+		$lastBlock = $dbw->newSelectQueryBuilder()
+			->select( 'MAX(gb_id)' )
+			->from( 'globalblocks' )
+			->caller( __METHOD__ )
+			->fetchField();
 		if ( !$lastBlock ) {
 			$this->output( "The globalblocks table seems to be empty.\n" );
 			return true;
@@ -57,16 +56,17 @@ class PopulateCentralId extends LoggedUpdateMaintenance {
 			$max = $min + $batchSize;
 			$this->output( "Now processing global blocks with id between {$min} and {$max}...\n" );
 
-			$res = $dbr->select(
-				'globalblocks',
-				[ 'gb_id', 'gb_by' ],
-				[
+			$res = $dbw->newSelectQueryBuilder()
+				->select( [ 'gb_id', 'gb_by' ] )
+				->from( 'globalblocks' )
+				->where( [
 					'gb_by_central_id' => null,
 					"gb_by_wiki" => $wikiId,
-					"gb_id BETWEEN $min AND $max"
-				],
-				__METHOD__
-			);
+					$dbw->expr( 'gb_id', '>=', $min ),
+					$dbw->expr( 'gb_id', '<=', $max ),
+				] )
+				->caller( __METHOD__ )
+				->fetchResultSet();
 
 			foreach ( $res as $row ) {
 				$centralId = $lookup->centralIdFromName( $row->gb_by, CentralIdLookup::AUDIENCE_RAW );
@@ -74,16 +74,16 @@ class PopulateCentralId extends LoggedUpdateMaintenance {
 					$failed++;
 					continue;
 				}
-				$dbw->update(
-					'globalblocks',
-					[ 'gb_by_central_id' => $centralId ],
-					[ 'gb_id' => $row->gb_id ],
-					__METHOD__
-				);
+				$dbw->newUpdateQueryBuilder()
+					->update( 'globalblocks' )
+					->set( [ 'gb_by_central_id' => $centralId ] )
+					->where( [ 'gb_id' => $row->gb_id ] )
+					->caller( __METHOD__ )
+					->execute();
 			}
 
 			$count += $dbw->affectedRows();
-			$lbFactory->waitForReplication( [ 'domain' => $domain ] );
+			$this->waitForReplication();
 		}
 		$this->output( "Completed migration, updated $count row(s), migration failed for $failed row(s).\n" );
 

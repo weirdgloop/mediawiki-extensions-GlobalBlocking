@@ -14,7 +14,6 @@
 	"globalblocking-block-expiry": "Skadimi:",
 	"globalblocking-block-expiry-selector-other": "kohë të tjera:",
 	"globalblocking-block-legend": "Blloku një adresë IP globalisht",
-	"globalblocking-block-ipinvalid": "Adresa IP ($1) keni hyrë është i pavlefshëm. Ju lutem vini re se ju nuk mund të hyjë në një emër përdoruesi!",
 	"globalblocking-block-expiryinvalid": "Skadimit të hyrë është e pavlefshme.",
 	"globalblocking-block-submit": "Blloko këtë adresë IP globalisht",
 	"globalblocking-modify-submit": "Modifiko këtë bllok globale",

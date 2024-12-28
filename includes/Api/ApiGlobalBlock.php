@@ -2,54 +2,97 @@
 
 namespace MediaWiki\Extension\GlobalBlocking\Api;
 
-use ApiBase;
-use ApiMain;
-use ApiResult;
+use MediaWiki\Api\ApiBase;
+use MediaWiki\Api\ApiMain;
+use MediaWiki\Api\ApiResult;
 use MediaWiki\Block\BlockUserFactory;
-use MediaWiki\Extension\GlobalBlocking\GlobalBlocking;
-use Status;
+use MediaWiki\Extension\GlobalBlocking\Services\GlobalBlockingConnectionProvider;
+use MediaWiki\Extension\GlobalBlocking\Services\GlobalBlockLookup;
+use MediaWiki\Extension\GlobalBlocking\Services\GlobalBlockManager;
+use MediaWiki\ParamValidator\TypeDef\UserDef;
+use MediaWiki\Status\Status;
 use StatusValue;
 use Wikimedia\ParamValidator\ParamValidator;
 
 class ApiGlobalBlock extends ApiBase {
-	/** @var BlockUserFactory */
-	private $blockUserFactory;
+	private BlockUserFactory $blockUserFactory;
+	private GlobalBlockManager $globalBlockManager;
+	private GlobalBlockingConnectionProvider $globalBlockingConnectionProvider;
 
 	/**
 	 * @param ApiMain $mainModule
 	 * @param string $moduleName
 	 * @param BlockUserFactory $blockUserFactory
+	 * @param GlobalBlockManager $globalBlockManager
+	 * @param GlobalBlockingConnectionProvider $globalBlockingConnectionProvider
 	 */
 	public function __construct(
 		ApiMain $mainModule,
 		$moduleName,
-		BlockUserFactory $blockUserFactory
+		BlockUserFactory $blockUserFactory,
+		GlobalBlockManager $globalBlockManager,
+		GlobalBlockingConnectionProvider $globalBlockingConnectionProvider
 	) {
 		parent::__construct( $mainModule, $moduleName );
 
 		$this->blockUserFactory = $blockUserFactory;
+		$this->globalBlockManager = $globalBlockManager;
+		$this->globalBlockingConnectionProvider = $globalBlockingConnectionProvider;
 	}
 
 	public function execute() {
 		$this->checkUserRightsAny( 'globalblock' );
 
-		$this->requireOnlyOneParameter( $this->extractRequestParams(), 'expiry', 'unblock' );
+		// Validate that the API request was not made with incompatible parameters.
+		$params = $this->extractRequestParams();
+		$this->requireOnlyOneParameter( $params, 'id', 'target' );
+		$this->requireOnlyOneParameter( $params, 'expiry', 'unblock' );
+		$this->requireMaxOneParameter( $params, 'id', 'alsolocal' );
+
+		$target = $this->getParameter( 'target' ) ?? '#' . $this->getParameter( 'id' );
+
 		$result = $this->getResult();
-		$block = GlobalBlocking::getGlobalBlockingBlock( $this->getParameter( 'target' ), true );
 
 		if ( $this->getParameter( 'expiry' ) ) {
+			// Prevent modification of global autoblocks, as these are managed by the software.
+			$globalBlockId = GlobalBlockLookup::isAGlobalBlockId( $target );
+			if ( $globalBlockId ) {
+				$globalBlockingDbr = $this->globalBlockingConnectionProvider->getReplicaGlobalBlockingDatabase();
+				$isGlobalBlockAnAutoblock = $globalBlockingDbr->newSelectQueryBuilder()
+					->select( 'gb_autoblock_parent_id' )
+					->from( 'globalblocks' )
+					->where( [ 'gb_id' => $globalBlockId ] )
+					->caller( __METHOD__ )
+					->fetchField();
+
+				if ( $isGlobalBlockAnAutoblock ) {
+					$this->dieWithError(
+						'globalblocking-apierror-cannot-modify-global-autoblock',
+						'cannot-modify-global-autoblock'
+					);
+				}
+			}
+
 			$options = [];
 
 			if ( $this->getParameter( 'anononly' ) ) {
 				$options[] = 'anon-only';
 			}
 
-			if ( $block && $this->getParameter( 'modify' ) ) {
+			if ( $this->getParameter( 'allow-account-creation' ) ) {
+				$options[] = 'allow-account-creation';
+			}
+
+			if ( $this->getParameter( 'enable-autoblock' ) ) {
+				$options[] = 'enable-autoblock';
+			}
+
+			if ( $this->getParameter( 'modify' ) ) {
 				$options[] = 'modify';
 			}
 
-			$status = GlobalBlocking::block(
-				$this->getParameter( 'target' ),
+			$status = $this->globalBlockManager->block(
+				$target,
 				$this->getParameter( 'reason' ),
 				$this->getParameter( 'expiry' ),
 				$this->getUser(),
@@ -57,36 +100,46 @@ class ApiGlobalBlock extends ApiBase {
 			);
 
 			if ( $this->getParameter( 'alsolocal' ) && $status->isOK() ) {
-				$this->blockUserFactory->newBlockUser(
+				$localBlockStatus = $this->blockUserFactory->newBlockUser(
 					$this->getParameter( 'target' ),
 					$this->getUser(),
 					$this->getParameter( 'expiry' ),
 					$this->getParameter( 'reason' ),
 					[
-						'isCreateAccountBlocked' => true,
+						'isCreateAccountBlocked' => !$this->getParameter( 'local-allow-account-creation' ),
 						'isEmailBlocked' => $this->getParameter( 'localblocksemail' ),
 						'isUserTalkEditBlocked' => $this->getParameter( 'localblockstalk' ),
 						'isHardBlock' => !$this->getParameter( 'localanononly' ),
 						'isAutoblocking' => true,
 					]
 				)->placeBlock( $this->getParameter( 'modify' ) );
-				$result->addValue( 'globalblock', 'blockedlocally', true );
+				if ( !$localBlockStatus->isOK() ) {
+					$this->addLegacyErrorsFromStatus( $localBlockStatus, $result );
+				} else {
+					$result->addValue( 'globalblock', 'blockedlocally', true );
+				}
 			}
 
 			if ( !$status->isOK() ) {
 				$this->addLegacyErrorsFromStatus( $status, $result );
 			} else {
-				$result->addValue( 'globalblock', 'user', $this->getParameter( 'target' ) );
+				$result->addValue( 'globalblock', 'user', $target );
 				$result->addValue( 'globalblock', 'blocked', '' );
 				if ( $this->getParameter( 'anononly' ) ) {
 					$result->addValue( 'globalblock', 'anononly', '' );
+				}
+				if ( $this->getParameter( 'allow-account-creation' ) ) {
+					$result->addValue( 'globalblock', 'allow-account-creation', '' );
+				}
+				if ( $this->getParameter( 'enable-autoblock' ) ) {
+					$result->addValue( 'globalblock', 'enable-autoblock', '' );
 				}
 				$expiry = ApiResult::formatExpiry( $this->getParameter( 'expiry' ), 'infinite' );
 				$result->addValue( 'globalblock', 'expiry', $expiry );
 			}
 		} elseif ( $this->getParameter( 'unblock' ) ) {
-			$status = GlobalBlocking::unblock(
-				$this->getParameter( 'target' ),
+			$status = $this->globalBlockManager->unblock(
+				$target,
 				$this->getParameter( 'reason' ),
 				$this->getUser()
 			);
@@ -94,7 +147,7 @@ class ApiGlobalBlock extends ApiBase {
 			if ( !$status->isOK() ) {
 				$this->addLegacyErrorsFromStatus( $status, $result );
 			} else {
-				$result->addValue( 'globalblock', 'user', $this->getParameter( 'target' ) );
+				$result->addValue( 'globalblock', 'user', $target );
 				$result->addValue( 'globalblock', 'unblocked', '' );
 			}
 
@@ -127,9 +180,12 @@ class ApiGlobalBlock extends ApiBase {
 
 	public function getAllowedParams() {
 		return [
+			'id' => [
+				ParamValidator::PARAM_TYPE => 'integer',
+			],
 			'target' => [
-				ParamValidator::PARAM_TYPE => 'string',
-				ParamValidator::PARAM_REQUIRED => true
+				ParamValidator::PARAM_TYPE => 'user',
+				UserDef::PARAM_ALLOWED_USER_TYPES => [ 'ip', 'cidr', 'name', 'temp' ],
 			],
 			'expiry' => [
 				ParamValidator::PARAM_TYPE => 'expiry'
@@ -143,6 +199,12 @@ class ApiGlobalBlock extends ApiBase {
 			],
 			'anononly' => [
 				ParamValidator::PARAM_TYPE => 'boolean'
+			],
+			'allow-account-creation' => [
+				ParamValidator::PARAM_TYPE => 'boolean',
+			],
+			'enable-autoblock' => [
+				ParamValidator::PARAM_TYPE => 'boolean',
 			],
 			'modify' => [
 				ParamValidator::PARAM_TYPE => 'boolean'
@@ -158,6 +220,9 @@ class ApiGlobalBlock extends ApiBase {
 			],
 			'localanononly' => [
 				ParamValidator::PARAM_TYPE => 'boolean'
+			],
+			'local-allow-account-creation' => [
+				ParamValidator::PARAM_TYPE => 'boolean',
 			],
 			'token' => [
 				ParamValidator::PARAM_TYPE => 'string',

@@ -1,7 +1,9 @@
 <?php
 
-use MediaWiki\Extension\GlobalBlocking\GlobalBlocking;
-use MediaWiki\MediaWikiServices;
+namespace MediaWiki\Extension\GlobalBlocking\Maintenance;
+
+use MediaWiki\Extension\GlobalBlocking\GlobalBlockingServices;
+use MediaWiki\Maintenance\Maintenance;
 
 $IP = getenv( 'MW_INSTALL_PATH' );
 if ( $IP === false ) {
@@ -10,123 +12,106 @@ if ( $IP === false ) {
 require_once "$IP/maintenance/Maintenance.php";
 
 /**
- * If there is a whitelisted IP address or range with a corresponding global block
- * row but if the ids do not match, this script can be used to make the ids same so
- * that the whitelist is effective. Optionally, entries in the whitelist table with
- * no corresponding global block row can be deleted if the 'delete' option is enabled.
- * See https://phabricator.wikimedia.org/T56496.
+ * This script can be used to purge global_block_whitelist rows which have no
+ * corresponding globalblocks table row.
  */
 class FixGlobalBlockWhitelist extends Maintenance {
 
-	/** @var bool */
-	protected $dryRun = false;
+	protected bool $dryRun = false;
 
 	public function __construct() {
 		parent::__construct();
-		$this->addOption( 'delete', 'Delete whitelist entries with no corresponding global block' );
 		$this->addOption( 'dry-run', 'Run the script without any modifications' );
-		$this->setBatchSize( 20 );
+		$this->setBatchSize( 500 );
+
+		// Allow unregistered options so that users of the script which have specified the --delete option
+		// do not break.
+		$this->setAllowUnregisteredOptions( true );
 
 		$this->requireExtension( 'GlobalBlocking' );
 	}
 
 	public function execute() {
 		$this->dryRun = $this->getOption( 'dry-run', false ) !== false;
+		$localDbr = $this->getReplicaDB();
 
-		$db = $this->getDB( DB_REPLICA );
-		$res = $db->select(
-			'global_block_whitelist',
-			[ 'gbw_id', 'gbw_address' ],
-			[],
-			__METHOD__
-		);
+		// First check if there are any rows in global_block_whitelist. If there are no rows, then exit now as there is
+		// nothing for this script to do.
+		$rowsExist = $localDbr->newSelectQueryBuilder()
+			->select( 'gbw_id' )
+			->from( 'global_block_whitelist' )
+			->caller( __METHOD__ )
+			->limit( 1 )
+			->fetchRowCount();
 
-		$whitelistEntries = [];
-		foreach ( $res as $row ) {
-			$whitelistEntries[ $row->gbw_id ] = $row->gbw_address;
-		}
-
-		if ( !$whitelistEntries ) {
+		if ( !$rowsExist ) {
 			$this->output( "No whitelist entries.\n" );
 			return;
 		}
 
-		$whitelistedIPs = array_values( $whitelistEntries );
-
-		$gdbr = GlobalBlocking::getGlobalBlockingDatabase( DB_REPLICA );
-		$gblocks = $gdbr->select(
-			'globalblocks',
-			[ 'gb_id', 'gb_address' ],
-			[ 'gb_address' => $whitelistedIPs ],
-			__METHOD__
-		);
-
-		$gblockEntries = [];
-		foreach ( $gblocks as $gblock ) {
-			$gblockEntries[ $gblock->gb_id ] = $gblock->gb_address;
-		}
-
+		$lastGlobalBlockId = 0;
 		$broken = [];
-		foreach ( $gblockEntries as $gblockId => $gblockAddress ) {
-			$whitelistId = array_search( $gblockAddress, $whitelistEntries );
-			if ( $whitelistId !== false && $whitelistId !== $gblockId ) {
-				$broken[ $gblockId ] = $whitelistEntries[ $whitelistId ];
+		do {
+			// Select a batch of whitelist entries to check which start from a gbw_id greater than the greatest gbw_id
+			// from the last batch.
+			$localWhitelistIds = $localDbr->newSelectQueryBuilder()
+				->select( 'gbw_id' )
+				->from( 'global_block_whitelist' )
+				->where( $localDbr->expr( 'gbw_id', '>', $lastGlobalBlockId ) )
+				->orderBy( 'gbw_id' )
+				->limit( $this->getBatchSize() ?? 500 )
+				->caller( __METHOD__ )
+				->fetchFieldValues();
+
+			// If there were no whitelist entries in the batch, then exit now as there is nothing more to do.
+			if ( !count( $localWhitelistIds ) ) {
+				break;
 			}
-		}
 
-		$brokenCount = count( $broken );
-		if ( $brokenCount > 0 ) {
-			$this->output( "Found $brokenCount broken whitelist entries.\n" );
-			$this->fixBrokenWhitelist( $broken );
-		} else {
-			$this->output( "No broken whitelist entries.\n" );
-		}
+			// Find the associated global block rows for the whitelist entries in this batch.
+			$globalBlockingDbr = GlobalBlockingServices::wrap( $this->getServiceContainer() )
+				->getGlobalBlockingConnectionProvider()
+				->getReplicaGlobalBlockingDatabase();
+			$matchingGlobalBlockIds = $globalBlockingDbr->newSelectQueryBuilder()
+				->select( 'gb_id' )
+				->from( 'globalblocks' )
+				->where( [ 'gb_id' => $localWhitelistIds ] )
+				->caller( __METHOD__ )
+				->fetchFieldValues();
 
-		if ( $this->getOption( 'delete' ) ) {
-			$this->handleDeletions( array_diff( $whitelistedIPs, array_values( $gblockEntries ) ) );
-		}
+			$broken = array_merge( $broken, array_diff( $localWhitelistIds, $matchingGlobalBlockIds ) );
+		} while ( count( $localWhitelistIds ) === ( $this->getBatchSize() ?? 500 ) );
+
+		$this->handleDeletions( $broken );
 	}
 
-	protected function fixBrokenWhitelist( array $brokenEntries ) {
-		$count = 0;
-		$lbFactory = MediaWikiServices::getInstance()->getDBLoadBalancerFactory();
-		foreach ( $brokenEntries as $newId => $address ) {
-			if ( $this->dryRun ) {
-				$this->output( " Whitelist broken {$address}: current gb_id is $newId\n" );
-			} else {
-				$count++;
-				$this->getDB( DB_PRIMARY )->update(
-					'global_block_whitelist',
-					[ 'gbw_id' => $newId ],
-					[ 'gbw_address' => $address ],
-					__METHOD__
-				);
-				$this->output( " Fixed {$address}: id changed to $newId\n" );
-				if ( $count === $this->mBatchSize ) {
-					$lbFactory->waitForReplication();
-					$count = 0;
-				}
-			}
-		}
-		$this->output( "Finished processing broken whitelist entries.\n" );
-	}
-
+	/**
+	 * Handles the deletion of whitelist entries which have no corresponding global block.
+	 *
+	 * @param array $nonExistent An array of gbw_ids which have no corresponding global block
+	 * @return void
+	 */
 	protected function handleDeletions( array $nonExistent ) {
 		$nonExistentCount = count( $nonExistent );
-		if ( $nonExistentCount > 0 ) {
-			$this->output( "Found $nonExistentCount whitelist entries with no corresponding global blocks:\n"
-				. implode( "\n", $nonExistent ) . "\n"
-			);
-			if ( !$this->dryRun ) {
-				$this->getDB( DB_PRIMARY )->delete(
-					'global_block_whitelist',
-					[ 'gbw_address' => $nonExistent ],
-					__METHOD__
-				);
-				$this->output( "Finished deleting whitelist entries with no corresponding global blocks.\n" );
-			}
-		} else {
+		if ( $nonExistentCount === 0 ) {
+			// Return early if there are no whitelist entries to be deleted.
 			$this->output( "All whitelist entries have corresponding global blocks.\n" );
+			return;
+		}
+		$this->output( "Found $nonExistentCount whitelist entries with no corresponding global blocks with IDs:\n"
+			. implode( "\n", $nonExistent ) . "\n"
+		);
+		if ( !$this->dryRun ) {
+			// Delete the whitelist entries which have no corresponding global block in batches of 'batch-size'
+			// targets.
+			foreach ( array_chunk( $nonExistent, $this->getBatchSize() ?? 500 ) as $chunk ) {
+				$this->getPrimaryDB()->newDeleteQueryBuilder()
+					->deleteFrom( 'global_block_whitelist' )
+					->where( [ 'gbw_id' => $chunk ] )
+					->caller( __METHOD__ )
+					->execute();
+			}
+			$this->output( "Finished deleting whitelist entries with no corresponding global blocks.\n" );
 		}
 	}
 }

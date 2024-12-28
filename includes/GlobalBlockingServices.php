@@ -20,6 +20,17 @@
 
 namespace MediaWiki\Extension\GlobalBlocking;
 
+use MediaWiki\Extension\GlobalBlocking\Services\GlobalBlockingBlockPurger;
+use MediaWiki\Extension\GlobalBlocking\Services\GlobalBlockingConnectionProvider;
+use MediaWiki\Extension\GlobalBlocking\Services\GlobalBlockingGlobalAutoblockExemptionListProvider;
+use MediaWiki\Extension\GlobalBlocking\Services\GlobalBlockingGlobalBlockDetailsRenderer;
+use MediaWiki\Extension\GlobalBlocking\Services\GlobalBlockingLinkBuilder;
+use MediaWiki\Extension\GlobalBlocking\Services\GlobalBlockingUserVisibilityLookup;
+use MediaWiki\Extension\GlobalBlocking\Services\GlobalBlockLocalStatusLookup;
+use MediaWiki\Extension\GlobalBlocking\Services\GlobalBlockLocalStatusManager;
+use MediaWiki\Extension\GlobalBlocking\Services\GlobalBlockLookup;
+use MediaWiki\Extension\GlobalBlocking\Services\GlobalBlockManager;
+use MediaWiki\Extension\GlobalBlocking\Services\GlobalBlockReasonFormatter;
 use MediaWiki\MediaWikiServices;
 
 /**
@@ -48,5 +59,45 @@ class GlobalBlockingServices {
 
 	public function getReasonFormatter(): GlobalBlockReasonFormatter {
 		return $this->serviceContainer->get( 'GlobalBlocking.GlobalBlockReasonFormatter' );
+	}
+
+	public function getGlobalBlockingConnectionProvider(): GlobalBlockingConnectionProvider {
+		return $this->serviceContainer->get( 'GlobalBlocking.GlobalBlockingConnectionProvider' );
+	}
+
+	public function getGlobalBlockingBlockPurger(): GlobalBlockingBlockPurger {
+		return $this->serviceContainer->get( 'GlobalBlocking.GlobalBlockingBlockPurger' );
+	}
+
+	public function getGlobalBlockLocalStatusLookup(): GlobalBlockLocalStatusLookup {
+		return $this->serviceContainer->get( 'GlobalBlocking.GlobalBlockLocalStatusLookup' );
+	}
+
+	public function getGlobalBlockLocalStatusManager(): GlobalBlockLocalStatusManager {
+		return $this->serviceContainer->get( 'GlobalBlocking.GlobalBlockLocalStatusManager' );
+	}
+
+	public function getGlobalBlockLookup(): GlobalBlockLookup {
+		return $this->serviceContainer->get( 'GlobalBlocking.GlobalBlockLookup' );
+	}
+
+	public function getGlobalBlockManager(): GlobalBlockManager {
+		return $this->serviceContainer->get( 'GlobalBlocking.GlobalBlockManager' );
+	}
+
+	public function getGlobalBlockingLinkBuilder(): GlobalBlockingLinkBuilder {
+		return $this->serviceContainer->get( 'GlobalBlocking.GlobalBlockingLinkBuilder' );
+	}
+
+	public function getGlobalBlockingUserVisibilityLookup(): GlobalBlockingUserVisibilityLookup {
+		return $this->serviceContainer->get( 'GlobalBlocking.GlobalBlockingUserVisibilityLookup' );
+	}
+
+	public function getGlobalAutoblockExemptionListProvider(): GlobalBlockingGlobalAutoblockExemptionListProvider {
+		return $this->serviceContainer->get( 'GlobalBlocking.GlobalBlockingGlobalAutoblockExemptionListProvider' );
+	}
+
+	public function getGlobalBlockDetailsRenderer(): GlobalBlockingGlobalBlockDetailsRenderer {
+		return $this->serviceContainer->get( 'GlobalBlocking.GlobalBlockingGlobalBlockDetailsRenderer' );
 	}
 }
