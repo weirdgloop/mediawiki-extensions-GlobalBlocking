@@ -2,7 +2,8 @@
 	"@metadata": {
 		"authors": [
 			"Macofe",
-			"McDutchie"
+			"McDutchie",
+			"Karmwiki"
 		]
 	},
 	"globalblocking-desc": "[[Special:GlobalBlock|Permitte]] que adresses IP sia [[Special:GlobalBlockList|blocate trans plure wikis]]",
@@ -47,7 +48,7 @@
 	"globalblocking-list-tempblocks": "Celar blocadas temporari",
 	"globalblocking-list-indefblocks": "Celar blocadas infinite",
 	"globalblocking-list-addressblocks": "Celar blocadas de singule adresse IP",
-	"globalblocking-list-rangeblocks": "Celar blocadas de gruppos de adresses IP",
+	"globalblocking-list-rangeblocks": "Celar blocadas de intervallos",
 	"globalblocking-expiringblock": "expira le $1 a $2",
 	"globalblocking-infiniteblock": "infinite",
 	"globalblocking-list-noresults": "Nulle resultato trovate con le parametros fornite.",
